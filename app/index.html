@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>简历可视化编辑工作台</title>
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="tb-left">
+    <span class="logo">简历工作台</span>
+    <select id="doc-select" title="切换文档"></select>
+    <span id="kind-badge" class="badge"></span>
+  </div>
+  <div class="tb-mid">
+    <label>密度</label>
+    <select id="density-select">
+      <option value="宽松">宽松</option><option value="标准">标准</option><option value="紧凑">紧凑</option>
+    </select>
+    <button id="btn-newjob" class="btn" title="复制主简历生成岗位副本，投递时在此做取舍">＋ 新建岗位副本</button>
+  </div>
+  <div class="tb-right">
+    <span id="gauge-pages" class="chip">— 页</span>
+    <span id="gauge-fill" class="chip">—</span>
+    <span id="save-state" class="save-state">就绪</span>
+    <button id="btn-save" class="btn">💾 保存</button>
+    <button id="btn-export" class="btn primary">⬇ 导出 PDF</button>
+    <button id="btn-ai" class="btn">🤖 AI 助手</button>
+  </div>
+</header>
+
+<main>
+  <section id="left">
+    <div id="job-banner" class="banner hidden">岗位副本模式：这里的改动只影响此副本，主简历不受影响。取消勾选 = 从本版隐藏。</div>
+    <div id="cards"></div>
+    <div id="empty-hint" class="hidden">尚未加载文档</div>
+  </section>
+  <section id="right">
+    <div class="pv-toolbar">
+      <span>实时预览（A4）</span>
+      <select id="zoom-select">
+        <option value="0.5">50%</option><option value="0.65">65%</option>
+        <option value="0.8" selected>80%</option><option value="1">100%</option>
+      </select>
+    </div>
+    <div id="preview-scroll"><div id="zoom-box"><iframe id="preview" src="/app/preview.html"></iframe></div></div>
+  </section>
+</main>
+
+<aside id="ai-panel" class="hidden">
+  <div class="ai-head">
+    <strong>🤖 AI 助手</strong>
+    <button id="ai-close" class="btn small">✕</button>
+  </div>
+  <p class="ai-tip">1. 粘贴岗位 JD → 写入请求文件；2. 在 ZCode 里说「读 ai-request 生成建议」；3. 回来点「刷新建议」逐条采纳。</p>
+  <textarea id="ai-jd" placeholder="粘贴岗位 JD 原文…"></textarea>
+  <div class="ai-row">
+    <button id="ai-request" class="btn primary">① 写入 AI 请求</button>
+    <button id="ai-refresh" class="btn">② 刷新建议</button>
+  </div>
+  <div id="ai-cards"></div>
+</aside>
+
+<div id="toast"></div>
+<input type="file" id="photo-file" accept="image/*" class="hidden">
+<script src="editor.js"></script>
+</body>
+</html>

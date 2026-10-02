@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>预览</title>
+<link rel="stylesheet" href="print.css">
+</head>
+<body>
+<div class="paper d-std" id="paper"></div>
+<script>
+"use strict";
+/* 简历预览引擎：JSON -> A4 纸渲染；双向一页自适应（超页收紧 / 不满撑满版心）。
+   编辑器通过 postMessage 推送文档；导出 PDF 时以 ?print=1 从 /api/export-target 取文档。 */
+var PAGE_H = 1122.5;      // 297mm @96dpi
+var PAD_V = 75.6 + 68;    // 天头20mm + 地头18mm
+var CORE = PAGE_H - PAD_V; // 版心内容高 ≈ 979px
+var DENSITY_CLASS = { "宽松": "d-loose", "标准": "d-std", "紧凑": "d-tight" };
+var STRETCH_MAX = { "d-loose": 2.2, "d-std": 2.6, "d-tight": 3.4 }; // 撑满时间距整体拉伸上限：基准越紧允许拉越多，防稀疏内容拉失真
+var GAP_BASE = { sec: 12.1, entry: 4.9, li: 3.0 }; // 当前密度档基准间距(px)，每次 fit 前按实际类实测
+var densityCls = "d-std";
+
+var paper = document.getElementById("paper");
+var doc = null;
+var printMode = /[?&]print=1/.test(location.search);
+var fitted = false;
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function inlineMd(s) { // **加粗** -> <strong>
+  return esc(s).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+}
+function el(tag, cls, html) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+}
+
+function render(d) {
+  doc = d;
+  var m = doc.meta || {};
+  densityCls = DENSITY_CLASS[m["密度"]] || "d-std";
+  paper.className = "paper " + densityCls;
+  paper.innerHTML = "";
+
+  var head = el("div", "header");
+  var hm = el("div", "header-main");
+  hm.appendChild(el("h1", null, esc(m["姓名"] || "姓名")));
+  var parts = [];
+  if (m["电话"]) parts.push("电话：" + m["电话"]);
+  if (m["邮箱"]) parts.push("邮箱：" + m["邮箱"]);
+  if (m["年龄"]) parts.push("年龄：" + m["年龄"]);
+  if (m["城市"]) parts.push("现居：" + m["城市"]);
+  if (m["求职意向"]) parts.push("求职意向：" + m["求职意向"]);
+  if (parts.length) hm.appendChild(el("p", "contact", esc(parts.join("　|　"))));
+  head.appendChild(hm);
+  if (m["照片"]) {
+    var img = el("img", "photo");
+    img.src = "/data/" + encodeURIComponent(m["照片"]);
+    img.alt = "证件照";
+    img.onerror = function () { img.style.display = "none"; };
+    head.appendChild(img);
+  }
+  paper.appendChild(head);
+
+  var cwrap = el("div");
+  cwrap.id = "cwrap";
+  (doc.sections || []).forEach(function (sec) {
+    if (sec.hidden) return;
+    var s = el("section");
+    s.dataset.id = sec.id;
+    s.appendChild(el("h2", null, esc(sec["标题"] || "")));
+    (sec.entries || []).forEach(function (en) {
+      if (en.hidden) return;
+      var eDiv = el("div", "entry");
+      var eh = el("div", "entry-head");
+      eh.appendChild(el("span", "eh-left", esc(en.left || "")));
+      if (en.right) eh.appendChild(el("span", "eh-right", esc(en.right)));
+      eDiv.appendChild(eh);
+      if (en.meta) eDiv.appendChild(el("p", "meta", esc(en.meta)));
+      if ((en.bullets || []).some(function (b) { return !b.hidden; })) {
+        var ul = el("ul");
+        en.bullets.forEach(function (b) {
+          if (b.hidden) return;
+          ul.appendChild(el("li", null, inlineMd(b.text)));
+        });
+        eDiv.appendChild(ul);
+      }
+      s.appendChild(eDiv);
+    });
+    cwrap.appendChild(s);
+  });
+  paper.appendChild(cwrap);
+  fitted = false;
+  fit();
+}
+
+/* ===== 双向一页引擎 ===== */
+function varPx(name, fb) { // 读取当前密度档的 CSS 变量(mm)换算为 px
+  var v = parseFloat(getComputedStyle(paper).getPropertyValue(name));
+  return isFinite(v) && v > 0 ? v * 3.7795 : fb;
+}
+function contentH() {
+  var cw = document.getElementById("cwrap");
+  var head = paper.querySelector(".header");
+  return (head ? head.offsetHeight : 0) + (cw ? cw.offsetHeight : 0) + 8;
+}
+function clearFit() {
+  paper.style.lineHeight = "";
+  paper.style.fontSize = "";
+  ["--gap-sec", "--gap-entry", "--gap-li"].forEach(function (p) { paper.style.removeProperty(p); });
+  Array.prototype.forEach.call(paper.querySelectorAll("#cwrap > section"), function (s) {
+    s.style.marginTop = "";
+  });
+}
+function tightenLevel(level) { // 逐级收紧（岗位版强制一页）
+  if (level === 1) {
+    paper.style.setProperty("--gap-sec", (GAP_BASE.sec * 0.55 / 3.7795).toFixed(2) + "mm");
+    paper.style.setProperty("--gap-entry", (GAP_BASE.entry * 0.55 / 3.7795).toFixed(2) + "mm");
+    paper.style.setProperty("--gap-li", (GAP_BASE.li * 0.55 / 3.7795).toFixed(2) + "mm");
+  } else if (level === 2) {
+    paper.style.lineHeight = "1.3";
+  } else if (level === 3) {
+    paper.style.fontSize = "9.5pt";
+  }
+}
+function fill(slack) { // 富余空间按比例摊到 节/条目/条距 三级间距撑满版心（整体拉伸 ≤2.6 倍）
+  if (slack <= 0) return;
+  var total = 0, nodes, i;
+  nodes = paper.querySelectorAll("#cwrap > section");
+  for (i = 0; i < nodes.length; i++) total += parseFloat(getComputedStyle(nodes[i]).marginTop) || 0;
+  nodes = paper.querySelectorAll("#cwrap .entry");
+  for (i = 0; i < nodes.length; i++) total += parseFloat(getComputedStyle(nodes[i]).marginTop) || 0;
+  nodes = paper.querySelectorAll("#cwrap li");
+  for (i = 0; i < nodes.length; i++) total += parseFloat(getComputedStyle(nodes[i]).marginBottom) || 0;
+  if (total < 1) return;
+  var f = Math.min(1 + slack / total, STRETCH_MAX[densityCls] || 2.6);
+  paper.style.setProperty("--gap-sec", (GAP_BASE.sec * f / 3.7795).toFixed(2) + "mm");
+  paper.style.setProperty("--gap-entry", (GAP_BASE.entry * f / 3.7795).toFixed(2) + "mm");
+  paper.style.setProperty("--gap-li", (GAP_BASE.li * f / 3.7795).toFixed(2) + "mm");
+}
+function fit() {
+  if (fitted) return;
+  fitted = true;
+  clearFit();
+  GAP_BASE = { sec: varPx("--gap-sec", 12.1), entry: varPx("--gap-entry", 4.9), li: varPx("--gap-li", 3.0) };
+  var h = contentH();
+  if (doc && doc.kind === "job") { // 岗位版：强制一页
+    var level = 0;
+    while (h > CORE && level < 3) {
+      tightenLevel(++level);
+      h = contentH();
+    }
+  }
+  if (h < CORE) fill(CORE - h);
+  drawPages();
+  report();
+}
+function drawPages() {
+  Array.prototype.forEach.call(paper.querySelectorAll(".page-line"), function (n) { n.remove(); });
+  var total = paper.offsetHeight;
+  var pages = Math.max(1, Math.ceil(total / PAGE_H - 0.02));
+  for (var i = 1; i < pages; i++) {
+    var line = el("div", "page-line");
+    line.style.top = (i * PAGE_H) + "px";
+    line.appendChild(el("span", null, "第 " + (i + 1) + " 页"));
+    paper.appendChild(line);
+  }
+  return pages;
+}
+function report() {
+  var h = paper.offsetHeight;
+  var pages = Math.max(1, Math.ceil(h / PAGE_H - 0.02));
+  var pct = Math.round((contentH() + PAD_V) / PAGE_H * 100);
+  var msg = { type: "vui-gauge", pages: pages, h: Math.round(h), core: Math.round(CORE),
+              fill: pct, over: h > PAGE_H + 1 };
+  try { if (window.parent !== window) window.parent.postMessage(msg, "*"); } catch (e) {}
+  document.title = (printMode ? (pages === 1 ? "PDF-READY " : "PDF-PAGES" + pages + " ") : "预览 ") + pct + "%";
+}
+
+function fetchRetry(url, tries) {
+  tries = tries || 3;
+  return fetch(url).then(function (r) {
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  }).catch(function (e) {
+    if (tries <= 1) throw e;
+    return new Promise(function (res) { setTimeout(res, 350); }).then(function () {
+      return fetchRetry(url, tries - 1);
+    });
+  });
+}
+
+function loadDocByName(name) {
+  fetchRetry("/api/doc?name=" + encodeURIComponent(name)).then(function (d) { render(d); })
+    .catch(function () { paper.innerHTML = "<p style='padding:20px'>文档加载失败</p>"; });
+}
+
+window.addEventListener("message", function (ev) {
+  if (ev.data && ev.data.type === "render" && ev.data.doc) { render(ev.data.doc); }
+});
+
+(function init() {
+  var mName = /[?&]name=([^&]+)/.exec(location.search);
+  if (printMode) {
+    fetchRetry("/api/export-target").then(function (t) { loadDocByName(t.name); })
+      .catch(function () { paper.innerHTML = "<p style='padding:20px'>导出目标读取失败</p>"; });
+  } else if (mName) {
+    loadDocByName(decodeURIComponent(mName[1]));
+  }
+})();
+</script>
+</body>
+</html>

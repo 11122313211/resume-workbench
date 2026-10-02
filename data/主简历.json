@@ -1,0 +1,254 @@
+{
+  "kind": "master",
+  "name": "主简历",
+  "meta": {
+    "姓名": "张 三",
+    "电话": "138-0000-0011",
+    "邮箱": "zhangsan@example.com",
+    "年龄": "25 岁",
+    "城市": "",
+    "求职意向": "",
+    "照片": "",
+    "密度": "紧凑"
+  },
+  "sections": [
+    {
+      "id": "s-edu",
+      "标题": "教育经历",
+      "hidden": false,
+      "entries": [
+        {
+          "id": "e-edu1",
+          "left": "上海某某大学 · 计算机科学与技术 · 本科",
+          "right": "2021.09 – 2025.06",
+          "meta": "",
+          "tags": "#计算机 #本科 #奖学金 #CET622",
+          "hidden": false,
+          "bullets": [
+            {
+              "id": "b-edu1",
+              "text": "成绩排名前 10%，连续两年获**校级一等奖学金**；通过 CET-6。",
+              "hidden": false
+            },
+            {
+              "id": "b-edu2",
+              "text": "主修数据结构、操作系统、计算机网络、数据库原理。",
+              "hidden": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s-int",
+      "标题": "实习经历",
+      "hidden": false,
+      "entries": [
+        {
+          "id": "e-int1",
+          "left": "公司A科技 · 后端开发实习生",
+          "right": "2024.07 – 2024.12",
+          "meta": "支付中台组 · 技术栈：Java / Spring Cloud / MySQL / Redis / RocketMQ",
+          "tags": "#Java #SpringCloud #MySQL #Redis #支付 #高并发",
+          "hidden": false,
+          "bullets": [
+            {
+              "id": "b-int1-1",
+              "text": "参与支付核心链路迭代，独立完成商户对账模块开发，日均处理 **30 万笔**流水，差错率降至 0.01% 以下。",
+              "hidden": false
+            },
+            {
+              "id": "b-int1-2",
+              "text": "搭建接口自动化测试用例 **120+** 个，迭代回归耗时从 2 天缩短至 2 小时。",
+              "hidden": false
+            },
+            {
+              "id": "b-int1-3",
+              "text": "排查并修复缓存击穿线上问题，接口 P99 延迟从 800ms 降至 **120ms**。",
+              "hidden": false
+            }
+          ]
+        },
+        {
+          "id": "e-int2",
+          "left": "公司B信息技术 · 数据开发实习生",
+          "right": "2023.12 – 2024.05",
+          "meta": "数据平台组 · 技术栈：Python / SQL / Airflow",
+          "tags": "#Python #SQL #ETL #数据分析 #自动化",
+          "hidden": false,
+          "bullets": [
+            {
+              "id": "b-int2-1",
+              "text": "编写 ETL 脚本 20+ 个，整合 5 个业务方数据源，报表产出时效从 T+1 提升至小时级。",
+              "hidden": false
+            },
+            {
+              "id": "b-int2-2",
+              "text": "用 Excel VBA 搭建自动对账工具，人工核对时间减少 **80%**。",
+              "hidden": false
+            },
+            {
+              "id": "b-int2-3",
+              "text": "沉淀数据核对 SOP 文档并组内推广，新成员上手周期从 2 周缩短至 3 天。",
+              "hidden": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s-prj",
+      "标题": "项目经历",
+      "hidden": false,
+      "entries": [
+        {
+          "id": "e-prj1",
+          "left": "校园二手交易平台 · 后端负责人",
+          "right": "2023.09 – 2024.01",
+          "meta": "团队 5 人 · GitHub 200+ Star · 技术栈：Spring Cloud / Redis / MySQL",
+          "tags": "#微服务 #Redis #分布式 #压测 #从0到1",
+          "hidden": false,
+          "bullets": [
+            {
+              "id": "b-prj1-1",
+              "text": "设计微服务架构（网关/用户/商品/订单 4 服务），压测 **QPS 3000+**。",
+              "hidden": false
+            },
+            {
+              "id": "b-prj1-2",
+              "text": "实现基于 Redis 的分布式库存扣减，解决超卖问题，压测零超卖。",
+              "hidden": false
+            }
+          ],
+          "null": "on"
+        },
+        {
+          "id": "e-prj2",
+          "left": "行业智能问答 Agent · 负责人",
+          "right": "2024.10 – 2025.01",
+          "meta": "独立开发 · 技术栈：Dify / RAG / 向量数据库",
+          "tags": "#AI应用 #大模型 #RAG #Dify #知识库",
+          "hidden": false,
+          "bullets": [
+            {
+              "id": "b-prj2-1",
+              "text": "完成私有化部署与 RAG 知识库建设（文档清洗、分块、向量化），问答准确率 **90%+**。",
+              "hidden": false
+            },
+            {
+              "id": "b-prj2-2",
+              "text": "设计多分支自动化工作流与三层条件路由，按行业标准/业务模块/用户场景智能分流。",
+              "hidden": false
+            }
+          ]
+        },
+        {
+          "id": "e-prj3",
+          "left": "实验数据可视化大屏 · 核心开发",
+          "right": "2023.03 – 2023.08",
+          "meta": "课程项目 · 技术栈：Python / Flask / ECharts",
+          "tags": "#Python #可视化 #Web",
+          "hidden": false,
+          "bullets": [
+            {
+              "id": "b-prj3-1",
+              "text": "搭建实验数据采集与可视化大屏，接入 8 类传感器数据，刷新延迟低于 1 秒。",
+              "hidden": false
+            },
+            {
+              "id": "b-prj3-2",
+              "text": "编写数据处理管线，异常数据自动剔除，图表渲染性能提升 **60%**。",
+              "hidden": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s-cam",
+      "标题": "校园经历",
+      "hidden": false,
+      "entries": [
+        {
+          "id": "e-cam1",
+          "left": "校学生会技术部部长",
+          "right": "2022.09 – 2023.09",
+          "meta": "",
+          "tags": "#组织协调 #活动策划 #团队管理",
+          "hidden": false,
+          "bullets": [
+            {
+              "id": "b-cam1-1",
+              "text": "组织 3 场 **500+ 人**规模技术讲座，负责全流程统筹与嘉宾对接。",
+              "hidden": false
+            },
+            {
+              "id": "b-cam1-2",
+              "text": "搭建部门知识库与轮值制度，部门留存率从 60% 提升至 **90%**。",
+              "hidden": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s-hon",
+      "标题": "荣誉奖项",
+      "hidden": false,
+      "entries": [
+        {
+          "id": "e-hon1",
+          "left": "校级荣誉与竞赛奖项",
+          "right": "2022 – 2025",
+          "meta": "",
+          "tags": "#奖学金 #竞赛 #荣誉",
+          "hidden": false,
+          "bullets": [
+            {
+              "id": "b-hon1-1",
+              "text": "2023、2024 年校级一等奖学金；校“优秀学生干部”。",
+              "hidden": false
+            },
+            {
+              "id": "b-hon1-2",
+              "text": "全国大学生数学建模竞赛省级二等奖。",
+              "hidden": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s-skl",
+      "标题": "个人技能",
+      "hidden": false,
+      "entries": [
+        {
+          "id": "e-skl1",
+          "left": "技能清单",
+          "right": "",
+          "meta": "",
+          "tags": "#技能",
+          "hidden": false,
+          "bullets": [
+            {
+              "id": "b-skl1-1",
+              "text": "**语言/框架：** 熟练 Java、Spring Boot / Spring Cloud、MyBatis；了解 Go。",
+              "hidden": false
+            },
+            {
+              "id": "b-skl1-2",
+              "text": "**存储/中间件：** 熟练 MySQL、Redis；熟悉 RocketMQ、Elasticsearch。",
+              "hidden": false
+            },
+            {
+              "id": "b-skl1-3",
+              "text": "**工具/运维：** 熟悉 Docker、Git、Linux；了解 Kubernetes。",
+              "hidden": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

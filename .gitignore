@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.mimosa/
+.zcode/
+.zcodeignore
+tools/.build-work/
+data/照片*
+data/photo-*
+data/ai-request.json
+data/ai-suggestion.json
+data/.export-target.json
+data/jobs/*.pdf

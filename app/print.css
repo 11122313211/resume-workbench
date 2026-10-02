@@ -1,0 +1,52 @@
+/* ===== 打印级 A4 简历样式（预览与 PDF 1:1）===== */
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --fs-name: 24pt; --fs-sec: 12pt; --fs-entry: 10.5pt; --fs-body: 10pt; --fs-meta: 9pt;
+  --lh: 1.42; --gap-sec: 3.2mm; --gap-entry: 1.3mm; --gap-li: 0.8mm;
+}
+.d-loose { --lh: 1.55; --gap-sec: 4.6mm; --gap-entry: 1.8mm; --gap-li: 1.2mm; }
+.d-std   { --lh: 1.42; --gap-sec: 3.2mm; --gap-entry: 1.3mm; --gap-li: 0.8mm; }
+.d-tight { --lh: 1.3;  --gap-sec: 2.2mm; --gap-entry: 0.8mm; --gap-li: 0.4mm; }
+
+html, body { background: #545a63; }
+body { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; color: #1f2328; }
+
+/* A4 纸：天头 20 / 左右 18 / 地头 18 */
+.paper {
+  width: 210mm; min-height: 297mm; margin: 0 auto;
+  background: #fff; padding: 20mm 18mm 18mm;
+  position: relative;
+  font-size: var(--fs-body); line-height: var(--lh);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+@media screen { .paper { margin: 20px auto; box-shadow: 0 3px 18px rgba(0,0,0,.4); } }
+@media print { html, body { background: #fff; } .paper { margin: 0; box-shadow: none; min-height: 0; } .page-line { display: none !important; } }
+
+/* ===== 头部：姓名靠左 + 右侧证件照 ===== */
+.header { display: flex; justify-content: space-between; align-items: center; gap: 6mm; }
+.header-main { flex: 1; text-align: left; }
+.header-main h1 { font-size: var(--fs-name); font-weight: 700; letter-spacing: 6px; margin-bottom: 1.4mm; }
+.contact { font-size: 10.5pt; color: #333; line-height: 1.55; }
+.photo { width: 26mm; height: 34mm; object-fit: cover; object-position: center 15%; border: 0.2mm solid #bbb; flex: none; }
+
+/* ===== 章节 / 条目 / 正文 ===== */
+#cwrap > section { margin-top: var(--gap-sec); }
+h2 { font-size: var(--fs-sec); font-weight: 700; color: #111; letter-spacing: 1.5px;
+     border-bottom: 0.5mm solid #222; padding-bottom: 0.9mm; margin-bottom: 1.5mm; }
+.entry { margin-top: var(--gap-entry); }
+h2 + .entry, #cwrap > section > .entry:first-child { margin-top: 0; }
+.entry-head { display: flex; justify-content: space-between; align-items: baseline;
+              background: #f0f0f0; padding: 0.8mm 1.6mm; }
+.eh-left { font-weight: 700; font-size: var(--fs-entry); }
+.eh-right { font-size: var(--fs-meta); color: #555; white-space: nowrap; padding-left: 6mm; }
+.meta { font-size: var(--fs-meta); color: #555; margin-top: 0.4mm; }
+ul { margin: 0.9mm 0 0 0; padding: 0; list-style: none; }
+li { margin-bottom: var(--gap-li); text-align: justify; padding-left: 4.5mm; text-indent: -4.5mm; }
+li::before { content: "▪\00A0"; color: #222; }
+p.plain { margin: 0.9mm 0 0 0; text-align: justify; }
+strong { font-weight: 700; color: #000; }
+
+/* ===== 页界线（仅屏幕预览）===== */
+.page-line { position: absolute; left: -5mm; right: -5mm; border-top: 1.5px dashed rgba(180,40,40,.65); z-index: 5; }
+.page-line span { position: absolute; right: 0; top: 2px; font: 10px/1 sans-serif; color: rgba(180,40,40,.8); background: #fff; padding: 1px 4px; border-radius: 3px; }
