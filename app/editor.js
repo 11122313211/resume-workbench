@@ -724,7 +724,7 @@ function bindEvents() {
     var jd = document.getElementById("ai-jd").value.trim();
     if (!jd) { toast("请先粘贴 JD 原文"); return; }
     postJSON("/api/ai-request", { name: state.name, jd: jd }).then(function (r) {
-      if (r.ok) toast("AI 请求已写入 data/ai-request.json\n到 ZCode 说：读 ai-request 生成建议");
+      if (r.ok) toast("AI 请求已写入 data/ai-request.json\n到你的 AI agent 里说：读 ai-request 生成建议");
     });
   });
   document.getElementById("ai-refresh").addEventListener("click", loadSuggestions);
@@ -735,7 +735,7 @@ function loadSuggestions() {
   getJSON("/api/ai-suggestion").then(function (r) {
     var box = document.getElementById("ai-cards");
     var items = r.items || [];
-    if (!items.length) { box.innerHTML = "<div class='ai-empty'>暂无建议。先写入请求，再到 ZCode 生成 ai-suggestion.json</div>"; return; }
+    if (!items.length) { box.innerHTML = "<div class='ai-empty'>暂无建议。先写入请求，再由你的 AI agent 生成 ai-suggestion.json</div>"; return; }
     box.innerHTML = items.map(function (it, i) {
       var applied = state.appliedAI[i];
       var tag = it.type === "rewrite" ? "改写" : it.type === "hide" ? "建议隐藏" : it.type === "show" ? "建议恢复" : "说明";
@@ -766,7 +766,7 @@ function loadSuggestions() {
     });
   }).catch(function () {
     document.getElementById("ai-cards").innerHTML =
-      "<div class='ai-empty'>还没有 ai-suggestion.json。先「写入 AI 请求」，然后到 ZCode 说：读 ai-request 生成建议</div>";
+      "<div class='ai-empty'>还没有 ai-suggestion.json。先「写入 AI 请求」，然后在你的 AI agent 里说：读 ai-request 生成建议</div>";
   });
 }
 

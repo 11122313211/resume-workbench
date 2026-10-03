@@ -46,7 +46,7 @@ python export.py jobs/某岗位
 ## AI 辅助（人拍板）
 
 1. 编辑器右上「🤖 AI 助手」→ 粘贴 JD →「① 写入 AI 请求」（生成 `data/ai-request.json`）
-2. 到 ZCode 说：**"读 data/ai-request.json，生成 ai-suggestion"**
+2. 到你的 AI agent 里说：**"读 data/ai-request.json，生成 ai-suggestion"**
 3. 回编辑器「② 刷新建议」→ 逐条点「✓ 应用」
 
 建议文件协议 `data/ai-suggestion.json`：

@@ -11,7 +11,7 @@ API：
     POST /api/save {name, doc}      保存文档
     POST /api/newjob {name}         复制主简历创建岗位副本
     POST /api/export {name}         渲染并打印 A4 PDF
-    POST /api/ai-request {name, jd} 写入 AI 请求文件（由 ZCode 处理）
+    POST /api/ai-request {name, jd} 写入 AI 请求文件（由用户的 AI agent 处理）
     GET  /api/ai-suggestion         读 AI 建议文件
     POST /api/upload-photo?ext=.jpg 上传照片到 data/（编辑器文件对话框配套，字节体）
 """
