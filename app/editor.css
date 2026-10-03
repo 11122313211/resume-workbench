@@ -4,12 +4,46 @@ html, body { height: 100%; }
 body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
        background: #eef0f3; color: #24292f; display: flex; flex-direction: column; overflow: hidden; }
 
-#topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px;
-          background: #ffffff; border-bottom: 1px solid #d8dde5; padding: 8px 14px; flex: none; }
-.tb-left, .tb-mid, .tb-right { display: flex; align-items: center; gap: 8px; }
-.logo { font-weight: 700; letter-spacing: 1px; }
-.badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e5e9f0; color: #555; }
-.badge.job { background: #fdf0dd; color: #9a5b00; }
+/* ===== 悬浮侧边导航（收起 64px 图标栏，悬停/键盘聚焦展开；参考「侧边菜单」demo 交互）===== */
+#rail { position: fixed; left: 12px; top: 12px; bottom: 12px; width: 64px; z-index: 60;
+        background: #fff; border: 1px solid #d8dde5; border-radius: 16px;
+        box-shadow: 0 6px 24px rgba(20,24,30,.10); overflow: hidden;
+        display: flex; flex-direction: column; gap: 2px; padding: 10px 0 8px;
+        transition: width .25s ease, box-shadow .25s ease; }
+#rail:hover, #rail:focus-within { width: 216px; box-shadow: 0 10px 32px rgba(20,24,30,.16); transition-delay: .12s; }
+#rail:not(:hover):not(:focus-within) { transition-delay: .35s; } /* 收起稍迟疑，防误扫闪烁 */
+.rail-head { display: flex; align-items: center; gap: 10px; padding: 4px 14px; min-height: 42px; flex: none; }
+.rail-docicon { flex: none; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+                background: #eef4ff; color: #2f6fed; border-radius: 10px; font-size: 17px; }
+.rail-doctext { display: flex; flex-direction: column; min-width: 0; opacity: 0; width: 0; overflow: hidden;
+                transition: opacity .18s ease, width .25s ease; }
+#rail:hover .rail-doctext, #rail:focus-within .rail-doctext { opacity: 1; width: 136px; transition-delay: .12s; }
+.rail-doctext b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail-doctext i { font-style: normal; font-size: 11px; color: #8792a1; }
+.rail-doctext i.job { color: #9a5b00; }
+.rail-title { flex: none; font-size: 11px; color: #99a3af; padding: 7px 15px 2px; white-space: nowrap;
+              opacity: 0; transition: opacity .18s ease; }
+#rail:hover .rail-title, #rail:focus-within .rail-title { opacity: 1; transition-delay: .12s; }
+.rail-line { flex: none; height: 1px; background: #e8ecf2; margin: 5px 12px; }
+.rail-item { flex: none; display: flex; align-items: center; gap: 10px; border: 0; background: transparent;
+             padding: 8px 12px; margin: 1px 8px; border-radius: 9px; cursor: pointer; color: #444c57;
+             font-size: 13px; font-family: inherit; text-align: left; white-space: nowrap; position: relative; }
+.rail-item:hover { background: #eef1f5; }
+.rail-item:disabled { opacity: .5; cursor: default; }
+.rail-item .ric { flex: none; width: 18px; height: 18px; color: #555e6b; display: flex; align-items: center; justify-content: center; }
+.rail-item .ric svg { width: 18px; height: 18px; display: block; }
+.rail-item .con { opacity: 0; width: 0; overflow: hidden; transition: opacity .18s ease, width .25s ease; }
+#rail:hover .rail-item .con, #rail:focus-within .rail-item .con { opacity: 1; width: 124px; transition-delay: .12s; }
+.rail-item.active { color: #2f6fed; background: #eef4ff; }
+.rail-item.active .ric { color: #2f6fed; }
+.rail-item.active::before { content: ""; position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
+                            width: 4px; height: 22px; border-radius: 0 3px 3px 0; background: #2f6fed; }
+.rail-foot { margin-top: auto; flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 14px 2px; }
+.rail-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #b7c0cc; transition: background .2s; }
+.rail-dot.ok { background: #2ea44f; }
+.rail-dot.warn { background: #d93a3a; }
+.rail-dot.busy { background: #f0a020; }
+.rail-foot .con { font-size: 12px; color: #667; }
 
 .btn { font: 13px/1.4 "Microsoft YaHei", sans-serif; padding: 5px 12px; border: 1px solid #c4ccd6;
        background: #f7f8fa; border-radius: 6px; cursor: pointer; }
@@ -29,10 +63,12 @@ label { font-size: 12px; color: #666; }
 .save-state { font-size: 12px; color: #777; min-width: 64px; text-align: right; }
 
 main { flex: 1; display: flex; min-height: 0; }
-#left { width: 46%; min-width: 430px; overflow: auto; padding: 12px 14px 60px; border-right: 1px solid #d8dde5; }
+#left { width: 46%; min-width: 430px; overflow: auto; padding: 12px 14px 60px 88px; border-right: 1px solid #d8dde5; }
 #right { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #545a63; }
 .pv-toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; color: #dfe3e8; font-size: 12px;
-              background: #464b53; flex: none; }
+              background: #464b53; flex: none; flex-wrap: wrap; }
+.pv-toolbar .pv-label { color: #b9c2ce; }
+.pv-toolbar .spacer { flex: 1; }
 .pv-toolbar select { padding: 2px 6px; }
 #preview-scroll { flex: 1; overflow: auto; padding: 14px; }
 #zoom-box { margin: 0 auto; }
@@ -76,9 +112,14 @@ main { flex: 1; display: flex; min-height: 0; }
 #empty-hint { color: #889; text-align: center; padding: 40px 0; }
 
 /* ===== AI 面板 ===== */
-#ai-panel { position: fixed; top: 52px; right: 12px; bottom: 12px; width: 400px; z-index: 50;
+/* ===== AI 抽屉（右侧滑入滑出，Ctrl+J / 侧栏开关）===== */
+#ai-panel { position: fixed; top: 12px; right: 12px; bottom: 12px; width: 400px; z-index: 50;
             background: #fff; border: 1px solid #d0d6de; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.25);
-            display: flex; flex-direction: column; padding: 12px; overflow: auto; }
+            display: flex; flex-direction: column; padding: 12px; overflow: auto;
+            transform: translateX(0); visibility: visible;
+            transition: transform .25s ease, visibility 0s; }
+#ai-panel.ai-closed { transform: translateX(110%); visibility: hidden;
+                      transition: transform .25s ease, visibility 0s .25s; }
 .ai-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .ai-tip { font-size: 12px; color: #667; background: #f4f6f9; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
 #ai-jd { width: 100%; min-height: 110px; resize: vertical; font-size: 12.5px; }

@@ -3,33 +3,47 @@
 <head>
 <meta charset="utf-8">
 <title>简历可视化编辑工作台</title>
-<link rel="stylesheet" href="editor.css?v=4">
+<link rel="stylesheet" href="editor.css?v=5">
 </head>
 <body>
-<header id="topbar">
-  <div class="tb-left">
-    <span class="logo">简历工作台</span>
-    <select id="doc-select" title="切换文档"></select>
-    <span id="kind-badge" class="badge"></span>
+<!-- 悬浮侧边导航：收起为图标栏，悬停/键盘聚焦展开（同「侧边菜单」demo 交互） -->
+<nav id="rail" aria-label="主导航">
+  <div class="rail-head" title="当前文档">
+    <span class="rail-docicon" id="rail-docicon">📄</span>
+    <span class="rail-doctext"><b id="rail-docname">—</b><i id="rail-kind">加载中…</i></span>
   </div>
-  <div class="tb-mid">
-    <label id="density-label">密度</label>
-    <span class="seg" id="density-seg" role="group" aria-labelledby="density-label">
-      <button type="button" data-density="宽松" aria-pressed="false">宽松</button><button type="button" data-density="标准" class="on" aria-pressed="true">标准</button><button type="button" data-density="紧凑" aria-pressed="false">紧凑</button>
-    </span>
-    <button id="btn-newjob" class="btn" title="复制主简历生成岗位副本，投递时在此做取舍">＋ 新建岗位副本</button>
+  <div class="rail-line"></div>
+  <div class="rail-title">文档</div>
+  <div id="rail-docs"></div>
+  <button class="rail-item" data-nav="newjob" title="复制主简历生成岗位副本">
+    <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>
+    <span class="con">新建岗位副本</span>
+  </button>
+  <div class="rail-line"></div>
+  <div class="rail-title">AI</div>
+  <button class="rail-item" data-nav="ai" title="AI 助手（Ctrl+J）">
+    <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="3"/><path d="M12 9V5M9.5 5h5"/><circle cx="9.5" cy="13.5" r=".9" fill="currentColor" stroke="none"/><circle cx="14.5" cy="13.5" r=".9" fill="currentColor" stroke="none"/></svg></span>
+    <span class="con">AI 助手</span>
+  </button>
+  <div class="rail-line"></div>
+  <div class="rail-title">动作</div>
+  <button class="rail-item" data-nav="save" title="保存（Ctrl+S）">
+    <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-6h8v6"/></svg></span>
+    <span class="con">保存</span>
+  </button>
+  <button class="rail-item" data-nav="export" title="导出 A4 PDF（Ctrl+E）">
+    <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4"/><path d="M5 20h14"/></svg></span>
+    <span class="con">导出 PDF</span>
+  </button>
+  <button class="rail-item" data-nav="help" title="新手引导 / 快捷键（?）">
+    <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2.9-1.2 1.8"/><path d="M12 16.6h.01"/></svg></span>
+    <span class="con">引导与快捷键</span>
+  </button>
+  <div class="rail-foot">
+    <span class="rail-dot" id="rail-dot"></span>
+    <span class="con" id="save-state">就绪</span>
   </div>
-  <div class="tb-right">
-    <span id="gauge-pages" class="chip">— 页</span>
-    <span id="gauge-fill" class="chip">—</span>
-    <span id="chars" class="chip">成果字数 —</span>
-    <span id="save-state" class="save-state">就绪</span>
-    <button id="btn-help" class="btn" title="新手引导 / 快捷键（?）" aria-label="帮助">?</button>
-    <button id="btn-save" class="btn">💾 保存</button>
-    <button id="btn-export" class="btn primary">⬇ 导出 PDF</button>
-    <button id="btn-ai" class="btn">🤖 AI 助手</button>
-  </div>
-</header>
+</nav>
 
 <main>
   <section id="left">
@@ -39,33 +53,41 @@
   </section>
   <section id="right">
     <div class="pv-toolbar">
-      <span>实时预览（A4）</span>
-      <select id="zoom-select">
+      <span class="pv-label">实时预览（A4）</span>
+      <span class="seg" id="density-seg" role="group" aria-label="排版密度">
+        <button type="button" data-density="宽松" aria-pressed="false">宽松</button><button type="button" data-density="标准" class="on" aria-pressed="true">标准</button><button type="button" data-density="紧凑" aria-pressed="false">紧凑</button>
+      </span>
+      <span id="gauge-pages" class="chip">— 页</span>
+      <span id="gauge-fill" class="chip">—</span>
+      <span id="chars" class="chip">成果字数 —</span>
+      <span class="spacer"></span>
+      <select id="zoom-select" title="预览缩放">
         <option value="0.5">50%</option><option value="0.65">65%</option>
         <option value="0.8" selected>80%</option><option value="1">100%</option>
       </select>
     </div>
-    <div id="preview-scroll"><div id="zoom-box"><iframe id="preview" src="/app/preview.html?v=4"></iframe></div></div>
+    <div id="preview-scroll"><div id="zoom-box"><iframe id="preview" src="/app/preview.html?v=5"></iframe></div></div>
   </section>
 </main>
 
-<aside id="ai-panel" class="hidden">
+<aside id="ai-panel" class="ai-closed">
   <div class="ai-head">
     <strong>🤖 AI 助手</strong>
     <button id="ai-close" class="btn small">✕</button>
   </div>
-  <p class="ai-tip">1. 粘贴岗位 JD → 写入请求文件；2. 在你的 AI agent 里说「读 ai-request 生成建议」；3. 回来点「刷新建议」逐条采纳。</p>
+  <p class="ai-tip">1. 粘贴岗位 JD → 点「生成建议」写入请求文件；2. 点「📋 复制提示词」发给你的 AI agent；3. 建议生成后会<b>自动出现</b>在下方，逐条采纳。</p>
   <textarea id="ai-jd" placeholder="粘贴岗位 JD 原文…"></textarea>
   <div class="ai-row">
-    <button id="ai-request" class="btn primary">① 写入 AI 请求</button>
-    <button id="ai-refresh" class="btn">② 刷新建议</button>
+    <button id="ai-request" class="btn primary">生成建议</button>
+    <button id="ai-copy" class="btn" title="复制发给 AI agent 的提示词">📋 复制提示词</button>
+    <button id="ai-refresh" class="btn small" title="手动重新读取建议文件">↻</button>
   </div>
   <div id="ai-cards"></div>
 </aside>
 
 <div id="toast"></div>
 <input type="file" id="photo-file" accept="image/*" class="hidden">
-<script src="vendor/Sortable.min.js?v=4"></script>
-<script src="editor.js?v=4"></script>
+<script src="vendor/Sortable.min.js?v=5"></script>
+<script src="editor.js?v=5"></script>
 </body>
 </html>
