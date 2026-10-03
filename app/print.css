@@ -20,8 +20,19 @@ body { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif
   font-size: var(--fs-body); line-height: var(--lh);
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
-@media screen { .paper { margin: 20px auto; box-shadow: 0 3px 18px rgba(0,0,0,.4); } }
-@media print { html, body { background: #fff; } .paper { margin: 0; box-shadow: none; min-height: 0; } .page-line { display: none !important; } }
+@media screen {
+  .paper { margin: 20px auto; box-shadow: 0 3px 18px rgba(0,0,0,.4); }
+  #cwrap [data-id] { cursor: pointer; }
+  #cwrap section[data-id]:hover > h2 { color: #2f6fed; }
+  /* 右缘一页容量标尺 */
+  .capbar { position: absolute; right: -6mm; top: 20mm; width: 2.2mm; height: 979px;
+            background: rgba(0,0,0,.08); border-radius: 1mm; overflow: hidden; }
+  .capfill { position: absolute; bottom: 0; left: 0; right: 0; background: #d9a117; border-radius: 1mm; }
+  .capbar.ok .capfill { background: #1d9d52; }
+  .capbar.over .capfill { background: #c0392b; }
+}
+@media print { html, body { background: #fff; } .paper { margin: 0; box-shadow: none; min-height: 0; }
+  .page-line { display: none !important; } .capbar { display: none !important; } }
 
 /* ===== 头部：姓名靠左 + 右侧证件照 ===== */
 .header { display: flex; justify-content: space-between; align-items: center; gap: 6mm; }

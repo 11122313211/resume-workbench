@@ -13,16 +13,18 @@
     <span id="kind-badge" class="badge"></span>
   </div>
   <div class="tb-mid">
-    <label>密度</label>
-    <select id="density-select">
-      <option value="宽松">宽松</option><option value="标准">标准</option><option value="紧凑">紧凑</option>
-    </select>
+    <label id="density-label">密度</label>
+    <span class="seg" id="density-seg" role="group" aria-labelledby="density-label">
+      <button type="button" data-density="宽松">宽松</button><button type="button" data-density="标准" class="on">标准</button><button type="button" data-density="紧凑">紧凑</button>
+    </span>
     <button id="btn-newjob" class="btn" title="复制主简历生成岗位副本，投递时在此做取舍">＋ 新建岗位副本</button>
   </div>
   <div class="tb-right">
     <span id="gauge-pages" class="chip">— 页</span>
     <span id="gauge-fill" class="chip">—</span>
+    <span id="chars" class="chip">成果字数 —</span>
     <span id="save-state" class="save-state">就绪</span>
+    <button id="btn-help" class="btn" title="新手引导 / 快捷键（?）" aria-label="帮助">?</button>
     <button id="btn-save" class="btn">💾 保存</button>
     <button id="btn-export" class="btn primary">⬇ 导出 PDF</button>
     <button id="btn-ai" class="btn">🤖 AI 助手</button>
@@ -63,6 +65,7 @@
 
 <div id="toast"></div>
 <input type="file" id="photo-file" accept="image/*" class="hidden">
+<script src="vendor/Sortable.min.js"></script>
 <script src="editor.js"></script>
 </body>
 </html>

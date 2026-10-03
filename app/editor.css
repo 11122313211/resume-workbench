@@ -91,3 +91,50 @@ main { flex: 1; display: flex; min-height: 0; }
 #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 99;
          background: #2b2f36; color: #fff; padding: 9px 18px; border-radius: 8px; font-size: 13px;
          display: none; max-width: 80%; }
+.toast-act { margin-left: 10px; background: #2f6fed; color: #fff; border: 0; border-radius: 5px;
+             padding: 3px 10px; cursor: pointer; font-size: 12.5px; }
+
+/* ===== 桌面端打磨：焦点 / 悬停过渡 ===== */
+:focus-visible { outline: 2px solid #2f6fed; outline-offset: 1px; }
+.btn, .ctl button, .fold-btn, .ctl-b, .seg button, .add-btn { transition: background .15s, border-color .15s; }
+.card, .bullet-row { transition: box-shadow .15s, opacity .15s; }
+.card:hover { box-shadow: 0 2px 10px rgba(0,0,0,.07); }
+.save-state.ok { color: #176b33; }
+.save-state.warn { color: #a12626; }
+.card.flash, .bullet-row.flash { animation: flashHL 1.3s; }
+@keyframes flashHL { 0%, 55% { outline: 3px solid #2f6fed; outline-offset: 2px; } 100% { outline: 0 solid transparent; } }
+
+/* ===== 密度分段按钮 ===== */
+.seg { display: inline-flex; border: 1px solid #c4ccd6; border-radius: 6px; overflow: hidden; background: #fff; }
+.seg button { border: 0; background: transparent; padding: 5px 11px; cursor: pointer; font: inherit; font-size: 13px; color: #555; }
+.seg button + button { border-left: 1px solid #e3e7ee; }
+.seg button:hover { background: #eef1f5; }
+.seg button.on { background: #2f6fed; color: #fff; }
+
+/* ===== 拖拽（SortableJS forceFallback）===== */
+.drag-ghost { opacity: .35; background: #eef4ff; outline: 2px dashed #2f6fed; outline-offset: -2px; }
+.drag-chosen { opacity: .92; }
+.drag-fly { box-shadow: 0 10px 28px rgba(0,0,0,.28); border-radius: 8px; cursor: grabbing !important; }
+
+/* ===== 空状态引导 ===== */
+.empty-tip { font-size: 12.5px; color: #778; background: #f4f6fa; border: 1px dashed #ccd6e4;
+             border-radius: 8px; padding: 7px 10px; margin: 6px 0 2px; }
+.empty-tip.big { padding: 22px 12px; text-align: center; font-size: 13.5px; }
+
+/* ===== 成果加粗按钮 / 字数 ===== */
+.ctl-b { border: 1px solid #ccd3dc; background: #fff; border-radius: 5px; cursor: pointer;
+         font: 700 11px/1 "Microsoft YaHei", sans-serif; padding: 5px 7px; color: #555; flex: none; }
+.ctl-b:hover { background: #eef1f5; }
+.bcount { font-size: 11px; color: #99a3af; white-space: nowrap; flex: none; min-width: 30px; text-align: right; }
+
+/* ===== 轻量弹窗 / 引导 ===== */
+.modal-ov { position: fixed; inset: 0; background: rgba(20,24,30,.45); z-index: 90;
+            display: flex; align-items: center; justify-content: center; }
+.modal { background: #fff; border-radius: 14px; box-shadow: 0 14px 44px rgba(0,0,0,.3);
+         padding: 20px 22px; width: min(480px, 92vw); }
+.modal .m-title { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+.modal .m-body { font-size: 13px; color: #445; line-height: 1.6; margin-bottom: 14px; }
+.modal .m-row { display: flex; justify-content: flex-end; gap: 8px; }
+.modal .ob-steps { margin: 10px 0 6px; padding-left: 20px; }
+.modal .ob-steps li { font-size: 13px; color: #333; line-height: 1.7; margin-bottom: 8px; }
+.modal .ob-tip { font-size: 12px; color: #778; background: #f4f6fa; border-radius: 8px; padding: 7px 10px; }

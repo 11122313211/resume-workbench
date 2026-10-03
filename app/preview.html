@@ -74,6 +74,7 @@ function render(d) {
     (sec.entries || []).forEach(function (en) {
       if (en.hidden) return;
       var eDiv = el("div", "entry");
+      eDiv.dataset.id = en.id;
       var eh = el("div", "entry-head");
       eh.appendChild(el("span", "eh-left", esc(en.left || "")));
       if (en.right) eh.appendChild(el("span", "eh-right", esc(en.right)));
@@ -83,7 +84,9 @@ function render(d) {
         var ul = el("ul");
         en.bullets.forEach(function (b) {
           if (b.hidden) return;
-          ul.appendChild(el("li", null, inlineMd(b.text)));
+          var li = el("li", null, inlineMd(b.text));
+          li.dataset.id = b.id;
+          ul.appendChild(li);
         });
         eDiv.appendChild(ul);
       }
@@ -155,7 +158,19 @@ function fit() {
   }
   if (h < CORE) fill(CORE - h);
   drawPages();
+  drawCap(contentH());
   report();
+}
+function drawCap(h) { // 右缘一页容量标尺（仅屏幕预览，打印隐藏）
+  var old = document.getElementById("capbar");
+  if (old) old.remove();
+  if (!(doc && (doc.kind === "job" || h <= CORE))) return; // 两页主简历不画（页界线已表达）
+  var pct = Math.max(4, Math.min(100, Math.round(h / CORE * 100)));
+  var bar = el("div", "capbar " + (h > CORE ? "over" : pct >= 90 ? "ok" : "mid"));
+  var fillEl = el("div", "capfill");
+  fillEl.style.height = pct + "%";
+  bar.appendChild(fillEl);
+  paper.appendChild(bar);
 }
 function drawPages() {
   Array.prototype.forEach.call(paper.querySelectorAll(".page-line"), function (n) { n.remove(); });
@@ -199,6 +214,14 @@ function loadDocByName(name) {
 
 window.addEventListener("message", function (ev) {
   if (ev.data && ev.data.type === "render" && ev.data.doc) { render(ev.data.doc); }
+});
+
+/* 点预览内容 -> 让编辑器定位左侧对应卡片 */
+paper.addEventListener("click", function (ev) {
+  if (printMode) return;
+  var n = ev.target.closest ? ev.target.closest("[data-id]") : null;
+  if (!n) return;
+  try { window.parent.postMessage({ type: "locate", id: n.getAttribute("data-id") }, "*"); } catch (e) {}
 });
 
 (function init() {
