@@ -87,12 +87,15 @@ class Handler(SimpleHTTPRequestHandler):
         pass  # 静默访问日志
 
     # ---------- 工具 ----------
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")  # 本地工具：杜绝旧缓存与新页面混跑
+        super().end_headers()
+
     def _json(self, obj, status=200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
