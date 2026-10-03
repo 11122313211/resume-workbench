@@ -9,7 +9,7 @@
     "城市": "",
     "求职意向": "",
     "照片": "",
-    "密度": "标准"
+    "密度": "紧凑"
   },
   "sections": [
     {
@@ -147,7 +147,7 @@
           "right": "2023.03 – 2023.08",
           "meta": "课程项目 · 技术栈：Python / Flask / ECharts",
           "tags": "#Python #可视化 #Web",
-          "hidden": true,
+          "hidden": false,
           "bullets": [
             {
               "id": "b-prj3-1",
@@ -166,7 +166,7 @@
     {
       "id": "s-cam",
       "标题": "校园经历",
-      "hidden": true,
+      "hidden": false,
       "entries": [
         {
           "id": "e-cam1",
@@ -193,7 +193,7 @@
     {
       "id": "s-hon",
       "标题": "荣誉奖项",
-      "hidden": true,
+      "hidden": false,
       "entries": [
         {
           "id": "e-hon1",

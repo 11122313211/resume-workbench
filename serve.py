@@ -9,6 +9,7 @@ API：
     GET  /api/list                  文档列表
     GET  /api/doc?name=主简历        读文档
     POST /api/save {name, doc}      保存文档
+    POST /api/delete {name}         删除岗位副本（主简历不可删，连带清理同名 PDF）
     POST /api/newjob {name}         复制主简历创建岗位副本
     POST /api/export {name}         渲染并打印 A4 PDF
     POST /api/ai-request {name, jd} 写入 AI 请求文件（由用户的 AI agent 处理）
@@ -160,6 +161,20 @@ class Handler(SimpleHTTPRequestHandler):
             body = self._body()
             if parsed.path == "/api/save":
                 write_doc(body["name"], body["doc"])
+                return self._json({"ok": True})
+
+            if parsed.path == "/api/delete":
+                # 仅允许删除岗位副本；主简历明确禁删。连带清理已导出的同名 PDF。
+                name = safe_name(str(body.get("name", "")))
+                if name == "主简历":
+                    return self._json({"ok": False, "error": "主简历不可删除"}, 400)
+                p = doc_path(name)
+                if not p.is_file():
+                    return self._json({"ok": False, "error": "文档不存在"}, 404)
+                p.unlink()
+                pdf = JOBS / (name.split("/", 1)[1] + ".pdf")
+                if pdf.is_file():
+                    pdf.unlink()
                 return self._json({"ok": True})
 
             if parsed.path == "/api/newjob":

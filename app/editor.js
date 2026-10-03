@@ -74,7 +74,13 @@ function redo() {
 }
 
 /* ---------- 轻量弹窗 ---------- */
-function closeModal() { var m = document.getElementById("modal"); if (m) m.remove(); }
+function closeModal() {
+  var m = document.getElementById("modal");
+  if (m && m.querySelector(".onboard")) { // 引导无论怎么关都记为已读（Esc 与点背景行为一致）
+    try { localStorage.setItem("vui-onboarded", "1"); } catch (e) {}
+  }
+  if (m) m.remove();
+}
 function askConfirm(title, body, onOk) {
   closeModal();
   var ov = document.createElement("div");
@@ -132,6 +138,15 @@ function showOnboard(force) {
   });
 }
 
+/* ---------- 折叠状态（按文档记忆，localStorage 持久化） ---------- */
+var FOLD_KEY = "vui-folded";
+function loadFoldStore() {
+  try { return JSON.parse(localStorage.getItem(FOLD_KEY) || "{}"); } catch (e) { return {}; }
+}
+function saveFoldStore() {
+  try { localStorage.setItem(FOLD_KEY, JSON.stringify(state.folded)); } catch (e) {}
+}
+
 /* ---------- 模型查找 ---------- */
 function secById(id) { return (state.doc.sections || []).find(function (s) { return s.id === id; }); }
 function findEntry(id) {
@@ -161,19 +176,27 @@ function loadList() {
   return getJSON("/api/list").then(function (r) {
     state.list = r.docs || [];
     renderRail();
-    if (!state.name && state.list.length) switchDoc(state.list[0]);
+    if (!state.name && state.list.length) { // 恢复上次编辑的文档（localStorage 记忆）
+      var last = null;
+      try { last = localStorage.getItem("vui-last"); } catch (e) {}
+      switchDoc(state.list.indexOf(last) !== -1 ? last : state.list[0]);
+    }
   });
 }
 function switchDoc(name) {
+  flushSave(); // 先把上一个文档挂起的编辑落盘，避免 900ms 窗口内切档串写
   state.name = name;
+  try { localStorage.setItem("vui-last", name); } catch (e) {}
   return getJSON("/api/doc?name=" + encodeURIComponent(name)).then(function (doc) {
     state.doc = doc;
     var job = doc.kind === "job";
-    document.getElementById("rail-docicon").textContent = job ? "🎯" : "📄";
+    document.getElementById("rail-docicon").innerHTML = job ? SVG_TARGET : SVG_DOC;
     document.getElementById("rail-docname").textContent = job ? name.replace(/^jobs\//, "") : "主简历";
     var kEl = document.getElementById("rail-kind");
     kEl.textContent = job ? "岗位副本" : "主简历（完整版）";
     kEl.className = job ? "job" : "";
+    var dc = document.getElementById("doc-chip");
+    if (dc) dc.textContent = job ? "🎯 " + name.replace(/^jobs\//, "") : "📄 主简历";
     document.getElementById("job-banner").classList.toggle("hidden", !job);
     var dens = (doc.meta && doc.meta.密度) || "标准";
     $$("#density-seg button").forEach(function (b) {
@@ -182,6 +205,9 @@ function switchDoc(name) {
       b.setAttribute("aria-pressed", on ? "true" : "false");
     });
     undoStack.length = 0; redoStack.length = 0; baseline = snap(); // 撤销栈不跨文档
+    state.appliedAI = {}; // AI 已应用标记不跨文档
+    resetAIRequestState();
+    if (!document.getElementById("ai-panel").classList.contains("ai-closed")) { aiJdFor = null; toggleAIPanel(true); } // 面板开着：JD 与建议跟随新文档
     renderCards();
     updateChars();
     renderRail();
@@ -195,14 +221,22 @@ function svgI(paths) {
 }
 var SVG_DOC = svgI("<path d='M7 3h7l4 4v14H7z'/><path d='M14 3v4h4'/>");
 var SVG_TARGET = svgI("<circle cx='12' cy='12' r='8'/><circle cx='12' cy='12' r='3.5'/>");
-function renderRail() { // 文档列表平铺在侧栏「文档」组，当前文档带指示条
+var SVG_X = svgI("<path d='M6 6l12 12M18 6L6 18'/>");
+var SVG_EYE = svgI("<path d='M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z'/><circle cx='12' cy='12' r='3'/>");
+var SVG_FOLDER = svgI("<path d='M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/>");
+var SVG_PIN = svgI("<path d='M12 16v6'/><path d='M8.5 3h7l-1 7 3.5 3.5H6L9.5 10z'/>");
+function renderRail() { // 文档列表平铺在侧栏「文档」组，当前文档带指示条；岗位副本悬停出现删除
   var h = "";
   (state.list || []).forEach(function (n) {
     var job = n !== "主简历", active = n === state.name;
-    h += "<button class='rail-item" + (active ? " active" : "") + "' data-nav='doc' data-doc=\"" + esc(n) +
+    h += "<div class='rail-row" + (active ? " active" : "") + "'>" +
+         "<button class='rail-item" + (active ? " active" : "") + "' data-nav='doc' data-doc=\"" + esc(n) +
          "\" title=\"" + esc(n) + "\"" + (active ? " aria-current='true'" : "") + ">" +
          "<span class='ric'>" + (job ? SVG_TARGET : SVG_DOC) + "</span>" +
-         "<span class='con'>" + esc(job ? n.replace(/^jobs\//, "") : "主简历") + "</span></button>";
+         "<span class='con'>" + esc(job ? n.replace(/^jobs\//, "") : "主简历") + "</span></button>" +
+         (job ? "<button class='rail-del' data-nav='deldoc' data-doc=\"" + esc(n) +
+               "\" title='删除此岗位副本（主简历不受影响）' aria-label='删除 " + esc(n) + "'>" + SVG_X + "</button>" : "") +
+         "</div>";
   });
   document.getElementById("rail-docs").innerHTML = h;
 }
@@ -215,12 +249,13 @@ function ctlBtns(kind, id, extra) {
     "<button data-act='del' data-k='" + kind + "' data-id='" + id + "' class='del' title='删除'>✕</button>" +
     (extra || "") + "</span>";
 }
-function showToggle(kind, id, hidden, job) { // 眼睛切换按钮：即时生效 + 按压态（.on=显示中），不弹 toast
+function showToggle(kind, id, hidden, job) { // 眼睛切换：显示中=灰描边，隐藏=琥珀实心（隐藏是需要处理的例外），不弹 toast
   var tip = job ? "显示中。点击从本岗位版隐藏（主简历不受影响），再点恢复"
                 : "显示中。点击隐藏（预览与导出 PDF 均不显示），再点恢复";
-  return "<button class='show-toggle" + (hidden ? "" : " on") + "' data-act='show' data-k='" + kind +
+  if (hidden) tip = job ? "已隐藏。点击恢复显示（本岗位版）" : "已隐藏。点击恢复显示";
+  return "<button class='show-toggle" + (hidden ? " off" : "") + "' data-act='show' data-k='" + kind +
     "' data-id='" + id + "' title='" + tip + "' aria-pressed='" + (hidden ? "false" : "true") +
-    "' aria-label='切换显示/隐藏'>👁</button>";
+    "' aria-label='切换显示/隐藏'>" + SVG_EYE + "</button>";
 }
 function renderCards() {
   var doc = state.doc;
@@ -236,7 +271,7 @@ function renderCards() {
     var ph = f === "照片" ? "点「选择」上传，或填 data/ 里已有的图片文件名" : f;
     h += "<div class='row'><span class='meta-input' style='width:56px'>" + f + "</span>" +
          "<input class='grow' data-k='meta' data-f='" + f + "' value=\"" + esc(doc.meta[f] || "") + "\" placeholder=\"" + ph + "\">" +
-         (f === "照片" ? "<button class='btn small' data-act='pick-photo' title='打开文件对话框选择本地图片，自动上传到 data/'>📂 选择</button>" +
+         (f === "照片" ? "<button class='btn small' data-act='pick-photo' title='打开文件对话框选择本地图片，自动上传到 data/'>" + SVG_FOLDER + " 选择</button>" +
            (doc.meta["照片"] ? "<button class='btn small' data-act='remove-photo' title='从简历移除照片（文件保留在 data/）'>✕ 移除</button>" : "") : "") +
          "</div>";
   });
@@ -247,7 +282,7 @@ function renderCards() {
     h += "<div class='empty-tip big'>还没有章节：点下方「＋ 添加章节」开始搭建，或在 AI 助手里让 AI 帮你搭结构</div>";
   }
   (doc.sections || []).forEach(function (sec) {
-    var fd = !!state.folded[sec.id];
+    var fd = !!(state.folded[state.name] || {})[sec.id];
     h += "<div class='card section" + (sec.hidden ? " item-off" : "") + (fd ? " folded" : "") + "' data-drop='section' data-id='" + sec.id + "'>";
     h += "<div class='card-head'>" +
          "<button class='fold-btn' data-act='fold' data-id='" + sec.id + "' aria-expanded='" + (fd ? "false" : "true") + "' title='" + (fd ? "展开章节" : "折叠为仅标题（方便拖动排序）") + "'>" + (fd ? "▸" : "▾") + "</button>" +
@@ -485,7 +520,10 @@ function locateCard(id) {
   var el = document.querySelector("#cards [data-id='" + id + "']");
   var sec = el && el.closest(".card.section");
   if (sec && sec.classList.contains("folded")) { // 目标在折叠章节内先展开
-    state.folded[sec.getAttribute("data-id")] = false;
+    var fid = sec.getAttribute("data-id");
+    var fsec = state.folded[state.name] || (state.folded[state.name] = {});
+    delete fsec[fid];
+    saveFoldStore();
     renderCards();
     el = document.querySelector("#cards [data-id='" + id + "']");
   }
@@ -496,14 +534,30 @@ function locateCard(id) {
 }
 
 /* ---------- 保存与预览 ---------- */
+var pendingSave = null; // 待落盘的 {name, doc}：捕获触发时的归属，切文档前强制落盘防串写
+function saveFailToast() {
+  toast("保存失败——内容仍在页面上，点「重试」或右下状态文字", 8000, { label: "重试", fn: flushSave });
+}
+function doSave(name, doc) {
+  setSaveState("✎ 修改中…", "busy");
+  return postJSON("/api/save", { name: name, doc: doc }).then(function (r) {
+    setSaveState(r.ok ? "✓ 已保存" : "⚠ 保存失败", r.ok ? "ok" : "warn");
+    if (!r.ok) saveFailToast();
+  }).catch(function () {
+    setSaveState("⚠ 保存失败", "warn"); saveFailToast();
+  });
+}
 function scheduleSave() {
   clearTimeout(saveTimer);
+  pendingSave = { name: state.name, doc: state.doc }; // doc 为引用：切档后旧引用不再变，落盘内容正确
   setSaveState("✎ 修改中…", "busy");
-  saveTimer = setTimeout(function () {
-    postJSON("/api/save", { name: state.name, doc: state.doc }).then(function (r) {
-      setSaveState(r.ok ? "✓ 已保存" : "⚠ 保存失败", r.ok ? "ok" : "warn");
-    }).catch(function () { setSaveState("⚠ 保存失败", "warn"); });
-  }, 900);
+  saveTimer = setTimeout(flushSave, 900);
+}
+function flushSave() { // 立即落盘挂起的修改（切文档/删除前调用，避免 900ms 窗口竞态）
+  clearTimeout(saveTimer); saveTimer = null;
+  if (!pendingSave) return;
+  var p = pendingSave; pendingSave = null;
+  doSave(p.name, p.doc);
 }
 function pushPreview() {
   var f = document.getElementById("preview");
@@ -528,6 +582,7 @@ function afterChange(structural, force) {
 /* ---------- 事件绑定 ---------- */
 function bindEvents() {
   var cards = document.getElementById("cards");
+  var pendingFocus = null; // 添加后聚焦新输入框，连续录入不用再点一次
 
   cards.addEventListener("input", function (e) {
     var t = e.target, k = t.getAttribute("data-k");
@@ -549,16 +604,18 @@ function bindEvents() {
       var f0 = findAny(id);
       if (f0) {
         f0.obj.hidden = !f0.obj.hidden;
-        btn.classList.toggle("on", !f0.obj.hidden);
-        btn.setAttribute("aria-pressed", f0.obj.hidden ? "false" : "true");
+      btn.classList.toggle("off", f0.obj.hidden);
+      btn.setAttribute("aria-pressed", f0.obj.hidden ? "false" : "true");
         var host = btn.closest(".card, .bullet-row");
         if (host) host.classList.toggle("item-off", f0.obj.hidden);
         afterChange(false, true);
       }
       return;
     }
-    if (act === "fold") { // 折叠/展开章节：仅编辑器显示状态，不改文档
-      state.folded[id] = !state.folded[id];
+    if (act === "fold") { // 折叠/展开章节：仅编辑器显示状态，不改文档；按文档记忆
+      var fs = state.folded[state.name] || (state.folded[state.name] = {});
+      fs[id] = !fs[id];
+      saveFoldStore();
       renderCards();
       return;
     }
@@ -571,19 +628,29 @@ function bindEvents() {
       state.doc.meta["照片"] = "";
       renderCards();
       afterChange(false, true);
-      toast("已从简历移除照片（文件保留在 data/）", 5000, { label: "撤销", fn: function () {
+      toast("已从简历移除照片（文件保留在 data/）", 8000, { label: "撤销", fn: function () {
         state.doc.meta["照片"] = prev; renderCards(); afterChange(false, true);
       } });
       return;
     }
     if (act === "add-section") {
-      state.doc.sections.push({ id: uid("s"), "标题": "新章节", hidden: false, entries: [] });
+      var ns = { id: uid("s"), "标题": "新章节", hidden: false, entries: [] };
+      state.doc.sections.push(ns);
+      pendingFocus = { sel: "#cards .card.section[data-id='" + ns.id + "'] .title-in" };
     } else if (act === "add-entry") {
       var s0 = secById(id);
-      if (s0) s0.entries.push({ id: uid("e"), left: "", right: "", meta: "", tags: "", hidden: false, bullets: [{ id: uid("b"), text: "", hidden: false }] });
+      if (s0) {
+        var ne = { id: uid("e"), left: "", right: "", meta: "", tags: "", hidden: false, bullets: [{ id: uid("b"), text: "", hidden: false }] };
+        s0.entries.push(ne);
+        pendingFocus = { sel: "#cards .card.entry[data-id='" + ne.id + "'] input[data-f='left']" };
+      }
     } else if (act === "add-bullet") {
       var r0 = findEntry(id);
-      if (r0) r0.entry.bullets.push({ id: uid("b"), text: "", hidden: false });
+      if (r0) {
+        var nb = { id: uid("b"), text: "", hidden: false };
+        r0.entry.bullets.push(nb);
+        pendingFocus = { sel: "#cards .bullet-row[data-id='" + nb.id + "'] textarea" };
+      }
     } else if (act === "del") {
       var what = ({ section: "章节", entry: "条目", bullet: "成果" })[k] || "内容";
       askConfirm("删除这条" + what + "？", "删除后可用 Ctrl+Z 或提示条上的「撤销」按钮随时恢复。", function () {
@@ -596,7 +663,7 @@ function bindEvents() {
           if (f2) f2.entry.bullets = f2.entry.bullets.filter(function (x) { return x.id !== id; });
         }
         afterChange(true);
-        toast("已删除" + what, 5000, { label: "撤销", fn: undo });
+        toast("已删除" + what, 8000, { label: "撤销", fn: undo });
       });
       return;
     } else if (act === "bold") {
@@ -616,6 +683,11 @@ function bindEvents() {
       else if (k === "bullet") { var f4 = findBullet(id); if (f4) mv(f4.entry.bullets, f4.bullet); }
     }
     afterChange(true);
+    if (pendingFocus) { // 新增的输入框直接聚焦，连续录入不中断
+      var fe = document.querySelector(pendingFocus.sel);
+      if (fe) { fe.focus(); if (fe.select) fe.select(); }
+      pendingFocus = null;
+    }
   });
 
   /* 显示/隐藏已改为眼睛按钮（走上方 click 委托），无需 change 监听 */
@@ -634,16 +706,17 @@ function bindEvents() {
     p.className = "chip " + (d.pages > 1 && state.doc && state.doc.kind === "job" ? "warn" : "");
     var pct = d.fill || 0;
     f.textContent = "版面 " + pct + "%";
+    f.title = "内容高度占版心比例；超过 100% 会溢出一页，建议取舍或收紧";
     var job = state.doc && state.doc.kind === "job";
-    f.className = "chip " + (job && (d.over || pct > 100) ? "warn" : pct >= 90 ? "ok" : "mid");
+    f.className = "chip " + ((d.over || pct > 100) ? "warn" : pct >= 90 ? "ok" : "mid"); // 溢出一律警示，不分主副简历
     adjustZoom();
   });
 
-  /* 侧边导航：事件委托分发（文档/新建副本/AI/保存/导出/引导） */
+  /* 侧边导航：事件委托分发（文档/删除副本/新建副本/AI/保存/导出/引导/图钉） */
   function saveNow() {
-    postJSON("/api/save", { name: state.name, doc: state.doc }).then(function (r) {
-      toast(r.ok ? "已保存" : "保存失败"); setSaveState(r.ok ? "✓ 已保存" : "⚠ 保存失败", r.ok ? "ok" : "warn");
-    });
+    pendingSave = { name: state.name, doc: state.doc };
+    flushSave();
+    toast("已保存");
   }
   function exportNow(navBtn) {
     function go() {
@@ -664,26 +737,58 @@ function bindEvents() {
     }
     go();
   }
+  function createJob(name) { // 真正创建：当前文档先落盘，避免竞态
+    flushSave();
+    postJSON("/api/newjob", { name: name }).then(function (r) {
+      if (!r.ok) { toast("创建失败：" + (r.error || "")); return; }
+      state.name = null;
+      return loadList().then(function () { return switchDoc(r.name); });
+    }).then(function () { toast("岗位副本已创建（已复制主简历）"); });
+  }
   function newJobFlow() {
     askText("新建岗位副本", "副本名称（建议：日期_公司_岗位）", "jobs/2026-XX-XX_公司_岗位", "如：2026-10-03_某公司_前端开发", function (name) {
       if (!name) { toast("名称不能为空"); return; }
-      postJSON("/api/newjob", { name: name }).then(function (r) {
-        if (!r.ok) { toast("创建失败：" + (r.error || "")); return; }
-        state.name = null;
-        return loadList().then(function () { return switchDoc(r.name); });
-      }).then(function () { toast("岗位副本已创建（已复制主简历）"); });
+      var full = name.indexOf("jobs/") === 0 ? name : "jobs/" + name;
+      if (state.list.indexOf(full) !== -1) { // 同名已存在：明确确认后才覆盖
+        askConfirm("同名副本已存在", "「" + full + "」已存在。继续将用主简历当前内容覆盖它，旧的裁剪成果无法恢复。", function () { createJob(name); });
+        return;
+      }
+      createJob(name);
     });
+  }
+  function deleteJob(name) {
+    flushSave(); // 若删的是当前文档，先落盘避免删除后又被补写回磁盘
+    postJSON("/api/delete", { name: name }).then(function (r) {
+      if (!r.ok) { toast("删除失败：" + (r.error || "")); return; }
+      toast("已删除 " + name);
+      if (state.name === name) state.name = null;
+      return loadList().then(function () {
+        if (!state.name && state.list.length) return switchDoc(state.list[0]);
+      });
+    }).catch(function (e) { toast("删除失败：" + e.message); });
   }
   document.getElementById("rail").addEventListener("click", function (e) {
     var b = e.target.closest("[data-nav]");
     if (!b || b.disabled) return;
     var nav = b.getAttribute("data-nav");
     if (nav === "doc") switchDoc(b.getAttribute("data-doc"));
+    else if (nav === "deldoc") {
+      var dn = b.getAttribute("data-doc");
+      askConfirm("删除岗位副本「" + dn.replace(/^jobs\//, "") + "」？", "将删除该副本及其已导出的 PDF，主简历不受影响，且不可恢复（建议导出留档后再删）。", function () { deleteJob(dn); });
+    }
     else if (nav === "newjob") newJobFlow();
     else if (nav === "ai") toggleAIPanel();
     else if (nav === "save") saveNow();
     else if (nav === "export") exportNow(b);
     else if (nav === "help") showOnboard(true);
+    else if (nav === "pin") {
+      var rail = document.getElementById("rail");
+      var on = !rail.classList.contains("pinned");
+      rail.classList.toggle("pinned", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.title = on ? "取消钉住（恢复悬停展开）" : "钉住导航（保持展开）";
+      try { localStorage.setItem("vui-pinned", on ? "1" : "0"); } catch (err) {}
+    }
   });
   document.getElementById("density-seg").addEventListener("click", function (e) {
     var b = e.target.closest("[data-density]");
@@ -697,6 +802,66 @@ function bindEvents() {
     afterChange(false, true); // 切换类：即时生效 + 按压态即可，不弹 toast（右侧预览实时变化即反馈）
   });
   document.getElementById("zoom-select").addEventListener("change", adjustZoom);
+
+  /* 左右分栏拖拽：拖动调占比、双击复位、位置记忆 */
+  var split = document.getElementById("splitter"), leftPane = document.getElementById("left");
+  var SPLIT_MIN = 380, RIGHT_MIN = 440;
+  function applySplit(w, persist) {
+    w = Math.max(SPLIT_MIN, Math.min(w, window.innerWidth - RIGHT_MIN));
+    leftPane.style.width = w + "px";
+    leftPane.style.minWidth = "0";
+    if (persist) { try { localStorage.setItem("vui-split", String(w)); } catch (e) {} }
+    adjustZoom();
+  }
+  if (split) {
+    var dragX = 0, dragW = 0, dragging = false;
+    split.addEventListener("pointerdown", function (e) {
+      dragging = true; dragX = e.clientX; dragW = leftPane.getBoundingClientRect().width;
+      split.setPointerCapture(e.pointerId);
+      document.body.classList.add("splitting");
+      e.preventDefault();
+    });
+    split.addEventListener("pointermove", function (e) {
+      if (dragging) applySplit(dragW + e.clientX - dragX, false);
+    });
+    split.addEventListener("pointerup", function () {
+      if (!dragging) return;
+      dragging = false;
+      document.body.classList.remove("splitting");
+      applySplit(leftPane.getBoundingClientRect().width, true);
+    });
+    split.addEventListener("dblclick", function () { // 双击恢复默认 46%
+      leftPane.style.width = ""; leftPane.style.minWidth = "";
+      try { localStorage.removeItem("vui-split"); } catch (e) {}
+      adjustZoom();
+    });
+    try {
+      var sw = parseInt(localStorage.getItem("vui-split") || "0", 10);
+      if (sw) applySplit(sw, false); // 恢复上次分栏
+    } catch (e) {}
+    window.addEventListener("resize", function () {
+      if (leftPane.style.width) applySplit(leftPane.getBoundingClientRect().width, false);
+    });
+  }
+
+  /* 保存状态文字可点击 = 立即保存（失败后的快捷重试入口） */
+  document.getElementById("save-state").addEventListener("click", saveNow);
+
+  /* 侧栏收起过渡期不吞点击 */
+  var railEl = document.getElementById("rail"), railLeaveTO = null;
+  railEl.addEventListener("mouseleave", function () {
+    railEl.classList.add("rail-leaving");
+    clearTimeout(railLeaveTO);
+    railLeaveTO = setTimeout(function () { railEl.classList.remove("rail-leaving"); }, 320);
+  });
+  /* 图钉状态恢复 */
+  try {
+    if (localStorage.getItem("vui-pinned") === "1") {
+      railEl.classList.add("pinned");
+      var pb = railEl.querySelector("[data-nav='pin']");
+      if (pb) { pb.setAttribute("aria-pressed", "true"); pb.title = "取消钉住（恢复悬停展开）"; }
+    }
+  } catch (e) {}
 
   /* 照片上传：本地图片 -> data/ -> 填入照片字段 */
   document.getElementById("photo-file").addEventListener("change", function () {
@@ -726,7 +891,7 @@ function bindEvents() {
   document.addEventListener("keydown", function (e) {
     var k = (e.key || "").toLowerCase();
     if (k === "escape") {
-      closeModal();
+      if (document.getElementById("modal")) { closeModal(); return; } // Esc 只关最顶层：先弹窗后 AI 面板
       toggleAIPanel(false);
       return;
     }
@@ -742,19 +907,38 @@ function bindEvents() {
     else if (k === "b" && e.target && e.target.tagName === "TEXTAREA") { e.preventDefault(); toggleBold(e.target); }
   });
 
-  /* AI 抽屉：生成建议 + 复制提示词 + 自动轮询（开关走侧栏/Ctrl+J） */
+  /* AI 抽屉：生成建议（等待中可点击取消）+ 复制提示词 + 自动轮询（开关走侧栏/Ctrl+J） */
   document.getElementById("ai-close").addEventListener("click", function () { toggleAIPanel(false); });
+  document.getElementById("ai-jd").addEventListener("input", function () { aiJdFor = state.name; });
   document.getElementById("ai-request").addEventListener("click", function () {
+    var btn = this;
+    if (aiWaiting) { // 等待中再点 = 取消等待，可改 JD 重新生成
+      aiWaiting = false; clearTimeout(aiWaitTO); stopAIPoll();
+      btn.textContent = "生成建议";
+      toast("已取消等待。建议文件就绪后可点 ↻ 查看");
+      return;
+    }
     var jd = document.getElementById("ai-jd").value.trim();
     if (!jd) { toast("请先粘贴 JD 原文"); return; }
-    var btn = this;
     btn.disabled = true; btn.textContent = "⏳ 写入请求…";
     postJSON("/api/ai-request", { name: state.name, jd: jd }).then(function (r) {
       if (!r.ok) throw new Error(r.error || "写入失败");
+      if (!state.doc.job) state.doc.job = {};
+      state.doc.job.jdText = jd; // JD 随文档落盘，刷新/切档不丢、不串
+      aiJdFor = state.name;
+      scheduleSave();
       aiSig = null; // 让轮询能识别到"新文件/更新"
-      btn.textContent = "⏳ 等待 agent 生成…";
+      aiWaiting = true;
+      btn.disabled = false; btn.textContent = "⏳ 等待 agent 生成…（点击取消）";
       toast("AI 请求已写入 data/ai-request.json\n到你的 AI agent 里说：读 ai-request 生成建议");
       startAIPoll();
+      clearTimeout(aiWaitTO);
+      aiWaitTO = setTimeout(function () { // 2 分钟无果自动解除等待，避免永久卡死
+        if (!aiWaiting) return;
+        aiWaiting = false;
+        btn.textContent = "重新生成";
+        toast("等待超时。可确认 agent 是否完成，然后点「重新生成」或 ↻");
+      }, 120000);
     }).catch(function (e) {
       btn.disabled = false; btn.textContent = "生成建议";
       toast("写入失败：" + e.message);
@@ -776,18 +960,28 @@ function bindEvents() {
 }
 
 /* ---------- AI 面板开关与自动轮询 ---------- */
+var aiPollTimer = null, aiSig = null, aiWaiting = false, aiWaitTO = null, aiJdFor = null; // aiJdFor=JD 输入框内容归属的文档
+function resetAIRequestState() { // 切文档/重置：解除等待态
+  aiWaiting = false;
+  clearTimeout(aiWaitTO);
+  stopAIPoll();
+  var rb = document.getElementById("ai-request");
+  if (rb) { rb.disabled = false; rb.textContent = "生成建议"; }
+}
 function toggleAIPanel(open) {
   var p = document.getElementById("ai-panel");
   var willOpen = open == null ? p.classList.contains("ai-closed") : open;
   p.classList.toggle("ai-closed", !willOpen);
   if (willOpen) {
-    var jd = state.doc && state.doc.job && state.doc.job.jdText;
     var box = document.getElementById("ai-jd");
-    if (jd && !box.value.trim()) box.value = jd; // 仅空时预填，不覆盖已编辑内容
+    if (aiJdFor !== state.name) { // JD 按文档归属：换文档即换内容，不串
+      box.value = (state.doc && state.doc.job && state.doc.job.jdText) || "";
+      aiJdFor = state.name;
+    }
     loadSuggestions();
+    if (aiWaiting) startAIPoll(); // 等待期间关过面板：重开自动恢复轮询
   } else stopAIPoll();
 }
-var aiPollTimer = null, aiSig = null;
 function stopAIPoll() { clearInterval(aiPollTimer); aiPollTimer = null; }
 function startAIPoll() { // 面板开启期间轮询建议文件（本地请求零成本），agent 写好后自动出现
   stopAIPoll();
@@ -814,7 +1008,7 @@ function loadSuggestions() {
       return it.type + "|" + (it.target || "") + "|" + (it.text || it.reason || "");
     }).join(";");
     var rb = document.getElementById("ai-request");
-    if (items.length && rb) { rb.disabled = false; rb.textContent = "生成建议"; }
+    if (items.length && rb) { rb.disabled = false; rb.textContent = "生成建议"; aiWaiting = false; clearTimeout(aiWaitTO); }
     if (!items.length) {
       box.innerHTML = "<div class='ai-empty'>暂无建议。点上方「生成建议」写入请求 → 点「📋 复制提示词」发给你的 AI agent；<br>建议文件生成后会自动出现在这里</div>";
       return;
@@ -836,12 +1030,16 @@ function loadSuggestions() {
       b.addEventListener("click", function () {
         var i2 = +b.getAttribute("data-ai"), it = box.__items[i2];
         var found = findAny(it.target);
-        if (it.type === "rewrite" && found) found.obj.text = it.text;
-        else if (it.type === "hide" && found) found.obj.hidden = true;
-        else if (it.type === "show" && found) found.obj.hidden = false;
+        if (!found) { // 目标可能已被删改：如实告知，不假成功
+          toast("目标条目不存在（文档可能已改动），建议未应用");
+          return;
+        }
+        if (it.type === "rewrite") found.obj.text = it.text;
+        else if (it.type === "hide") found.obj.hidden = true;
+        else if (it.type === "show") found.obj.hidden = false;
         state.appliedAI[i2] = true;
         afterChange(true, true);
-        toast("已应用 AI 建议", 5000, { label: "撤销", fn: function () {
+        toast("已应用 AI 建议", 8000, { label: "撤销", fn: function () {
           delete state.appliedAI[i2]; undo(); loadSuggestions();
         } });
         loadSuggestions();
@@ -866,6 +1064,7 @@ function adjustZoom() {
 
 /* ---------- 启动 ---------- */
 window.addEventListener("DOMContentLoaded", function () {
+  state.folded = loadFoldStore(); // 折叠状态按文档记忆
   bindEvents();
   loadList();
   showOnboard(false); // 首访三步引导（localStorage 记忆）
