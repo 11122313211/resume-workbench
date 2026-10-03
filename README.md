@@ -23,7 +23,6 @@ python export.py jobs/某岗位
 
 - **启动简历工作台.bat**：无黑窗启动（pythonw），自动打开编辑器；重复双击不会起第二个服务，只会再开一次页面
 - **停止简历工作台.bat**：一键停止本机服务（按端口 8618 结束进程）
-- **创建桌面快捷方式.bat**：在桌面生成「简历工作台」图标，以后双击图标即用
 
 ## 界面与工作流
 
@@ -82,10 +81,9 @@ python export.py jobs/某岗位
 ```
 ├── serve.py                       # 本地服务 + API（零依赖，单实例保护）
 ├── export.py                      # 命令行导出
-├── 启动/停止/创建快捷方式 .bat       # 桌面端启动器
+├── 启动/停止 .bat                  # 桌面端快速启动/停止
 ├── app/                           # 编辑器（index/editor/preview/print）
 ├── tools/printer.py               # 无头打印引擎（argv 全字面量）
-├── tools/make-shortcut.ps1        # 桌面快捷方式生成
 └── data/                          # 主简历.json + jobs/*.json + 照片 + AI 请求/建议
 ```
 
