@@ -69,8 +69,9 @@ main { flex: 1; display: flex; min-height: 0; }
 .add-btn { margin-top: 8px; width: 100%; border: 1px dashed #b9c2ce; background: #fbfcfd;
            color: #667; border-radius: 7px; padding: 6px; cursor: pointer; font-size: 12.5px; }
 .add-btn:hover { background: #f0f3f7; }
-.show-toggle { display: flex; align-items: center; gap: 3px; font-size: 11.5px; color: #667; white-space: nowrap; cursor: pointer; }
-.show-toggle input { margin: 0; }
+.show-toggle { border: 1px solid #ccd3dc; background: #fff; border-radius: 5px; cursor: pointer;
+               font-size: 11px; line-height: 1; padding: 4px 6px; color: #555; flex: none; }
+.show-toggle:hover { background: #eef1f5; }
 .item-off { opacity: .45; }
 #empty-hint { color: #889; text-align: center; padding: 40px 0; }
 
@@ -93,10 +94,17 @@ main { flex: 1; display: flex; min-height: 0; }
          display: none; max-width: 80%; }
 .toast-act { margin-left: 10px; background: #2f6fed; color: #fff; border: 0; border-radius: 5px;
              padding: 3px 10px; cursor: pointer; font-size: 12.5px; }
+.toast-act:hover { background: #265cd0; }
+
+/* ===== 切换类按压态：全站统一 .on（蓝 = 激活/显示中；密Seg / 加粗B / 眼睛共用一套视觉）===== */
+.seg button.on, .ctl-b.on, .show-toggle.on { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+/* 按下瞬间全站统一轻微下沉，配合 :focus-visible 构成按钮五态（可用/禁用/悬停/聚焦/按压） */
+.btn:active, .ctl button:active, .fold-btn:active, .ctl-b:active, .seg button:active,
+.add-btn:active, .show-toggle:active, .toast-act:active { transform: translateY(1px); }
 
 /* ===== 桌面端打磨：焦点 / 悬停过渡 ===== */
 :focus-visible { outline: 2px solid #2f6fed; outline-offset: 1px; }
-.btn, .ctl button, .fold-btn, .ctl-b, .seg button, .add-btn { transition: background .15s, border-color .15s; }
+.btn, .ctl button, .fold-btn, .ctl-b, .seg button, .add-btn, .show-toggle { transition: background .15s, border-color .15s, color .15s; }
 .card, .bullet-row { transition: box-shadow .15s, opacity .15s; }
 .card:hover { box-shadow: 0 2px 10px rgba(0,0,0,.07); }
 .save-state.ok { color: #176b33; }

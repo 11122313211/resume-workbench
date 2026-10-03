@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>预览</title>
-<link rel="stylesheet" href="print.css?v=3">
+<link rel="stylesheet" href="print.css?v=4">
 </head>
 <body>
 <div class="paper d-std" id="paper"></div>
@@ -27,8 +27,17 @@ var fitted = false;
 function esc(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-function inlineMd(s) { // **加粗** -> <strong>
-  return esc(s).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+/* ** 加粗解析：与 editor.js 的 boldRanges 是同一套配对规则（顺序扫描、两两成对），改动需两边同步 */
+function inlineMd(s) {
+  var v = esc(s), out = "", last = 0, i = 0, close;
+  while ((i = v.indexOf("**", i)) !== -1) {
+    close = v.indexOf("**", i + 2);
+    if (close === -1) break;
+    out += v.slice(last, i) + "<strong>" + v.slice(i + 2, close) + "</strong>";
+    last = close + 2;
+    i = close + 2;
+  }
+  return out + v.slice(last);
 }
 function el(tag, cls, html) {
   var e = document.createElement(tag);

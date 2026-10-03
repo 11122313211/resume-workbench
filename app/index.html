@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>简历可视化编辑工作台</title>
-<link rel="stylesheet" href="editor.css?v=3">
+<link rel="stylesheet" href="editor.css?v=4">
 </head>
 <body>
 <header id="topbar">
@@ -15,7 +15,7 @@
   <div class="tb-mid">
     <label id="density-label">密度</label>
     <span class="seg" id="density-seg" role="group" aria-labelledby="density-label">
-      <button type="button" data-density="宽松">宽松</button><button type="button" data-density="标准" class="on">标准</button><button type="button" data-density="紧凑">紧凑</button>
+      <button type="button" data-density="宽松" aria-pressed="false">宽松</button><button type="button" data-density="标准" class="on" aria-pressed="true">标准</button><button type="button" data-density="紧凑" aria-pressed="false">紧凑</button>
     </span>
     <button id="btn-newjob" class="btn" title="复制主简历生成岗位副本，投递时在此做取舍">＋ 新建岗位副本</button>
   </div>
@@ -33,7 +33,7 @@
 
 <main>
   <section id="left">
-    <div id="job-banner" class="banner hidden">岗位副本模式：这里的改动只影响此副本，主简历不受影响。取消勾选 = 从本版隐藏。</div>
+    <div id="job-banner" class="banner hidden">岗位副本模式：这里的改动只影响此副本，主简历不受影响。点 👁 切换显示/隐藏，隐藏的条目不进预览与 PDF。</div>
     <div id="cards"></div>
     <div id="empty-hint" class="hidden">尚未加载文档</div>
   </section>
@@ -45,7 +45,7 @@
         <option value="0.8" selected>80%</option><option value="1">100%</option>
       </select>
     </div>
-    <div id="preview-scroll"><div id="zoom-box"><iframe id="preview" src="/app/preview.html?v=3"></iframe></div></div>
+    <div id="preview-scroll"><div id="zoom-box"><iframe id="preview" src="/app/preview.html?v=4"></iframe></div></div>
   </section>
 </main>
 
@@ -65,7 +65,7 @@
 
 <div id="toast"></div>
 <input type="file" id="photo-file" accept="image/*" class="hidden">
-<script src="vendor/Sortable.min.js?v=3"></script>
-<script src="editor.js?v=3"></script>
+<script src="vendor/Sortable.min.js?v=4"></script>
+<script src="editor.js?v=4"></script>
 </body>
 </html>
