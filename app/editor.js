@@ -181,6 +181,8 @@ function loadList() {
       try { last = localStorage.getItem("vui-last"); } catch (e) {}
       switchDoc(state.list.indexOf(last) !== -1 ? last : state.list[0]);
     }
+  }).catch(function (e) { // 启动时服务不可达：给明确指引（后续操作的失败由各自 catch 提示）
+    if (!state.list.length) toast("无法连接本地服务：请双击「启动简历工作台.bat」启动后再刷新页面", 8000);
   });
 }
 function switchDoc(name) {
@@ -742,8 +744,12 @@ function bindEvents() {
     postJSON("/api/newjob", { name: name }).then(function (r) {
       if (!r.ok) { toast("创建失败：" + (r.error || "")); return; }
       state.name = null;
-      return loadList().then(function () { return switchDoc(r.name); });
-    }).then(function () { toast("岗位副本已创建（已复制主简历）"); });
+      return loadList().then(function () { return switchDoc(r.name); }).then(function () {
+        toast("岗位副本已创建（已复制主简历）");
+      });
+    }).catch(function (e) { // 服务不可达/中途异常：必须说话，不能看起来像无响应
+      toast("创建失败：" + (e && e.message ? e.message : "") + "\n本地服务可能没在运行——双击「启动简历工作台.bat」后再试", 8000);
+    });
   }
   function newJobFlow() {
     askText("新建岗位副本", "副本名称（建议：日期_公司_岗位）", "jobs/2026-XX-XX_公司_岗位", "如：2026-10-03_某公司_前端开发", function (name) {
