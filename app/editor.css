@@ -152,6 +152,14 @@ body.splitting { cursor: col-resize; user-select: none; }
 .show-toggle.off { background: #d97706; border-color: #b96403; color: #fff; } /* 隐藏 = 琥珀实心：需要处理的例外 */
 .show-toggle.off:hover { background: #c16604; }
 .item-off { opacity: .45; }
+/* 已隐藏条目自动压缩：只留一行可恢复的窄条，取舍视线集中在保留内容上（恢复=点琥珀眼睛） */
+.bullet-row.item-off { align-items: center; }
+.bullet-row.item-off textarea { height: 26px; min-height: 26px; resize: none; }
+.bullet-row.item-off .bcount, .bullet-row.item-off .ctl-b { display: none; }
+.card.entry.item-off > .row:not(:first-child), .card.entry.item-off > .bullet-row,
+.card.entry.item-off > .add-btn, .card.entry.item-off > .empty-tip { display: none; }
+.card.section.item-off > .card.entry, .card.section.item-off > .add-btn,
+.card.section.item-off > .empty-tip { display: none; }
 #empty-hint { color: #889; text-align: center; padding: 40px 0; }
 
 /* ===== AI 面板 ===== */

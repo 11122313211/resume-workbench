@@ -310,9 +310,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=10" in page and "editor.css?v=9" in page
+    ok = "editor.js?v=11" in page and "editor.css?v=10" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=10 与 editor.css?v=9" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=11 与 editor.css?v=10" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -684,12 +684,19 @@ var CASES = {
       return el && el.classList.contains("item-off") && el.querySelector(".show-toggle.off");
     }, 6000, "菜单隐藏生效");
     log("menu/hide", true, "菜单「隐藏」生效：行变暗 + 琥珀眼睛");
+    var comp = q("#cards .card.section[data-id='" + tid + "'] > .card.entry");
+    var disp = comp ? idoc().defaultView.getComputedStyle(comp).display : "(无条目)";
+    log("menu/compress", disp === "none", "隐藏章节自动压缩：条目 display=" + disp);
+    var hc = idoc().getElementById("hidden-chip");
+    log("menu/hidden-chip", !!hc && !hc.classList.contains("hidden") && /已隐藏\s*1/.test(hc.textContent),
+        "进度 chip=" + (hc ? hc.textContent : "无"));
     q("#cards .card.section[data-id='" + tid + "']").querySelector(".show-toggle.off").click();
     await wwait(function () {
       var el = q("#cards .card.section[data-id='" + tid + "']");
       return el && !el.classList.contains("item-off");
     }, 6000, "琥珀眼睛恢复");
-    log("menu/eye-restore", true, "琥珀眼睛一键恢复显示");
+    var hc2 = idoc().getElementById("hidden-chip");
+    log("menu/eye-restore", hc2 && hc2.classList.contains("hidden"), "琥珀眼睛一键恢复显示；chip 归零无痕");
     m = await openOnVisible();
     var sid = m.querySelector("[data-act='up']").getAttribute("data-id");
     m.querySelector("[data-act='up']").click();

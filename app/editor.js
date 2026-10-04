@@ -343,12 +343,14 @@ function renderCards() {
 
 /* ---------- 字数统计 ---------- */
 function updateChars() {
-  var n = 0;
+  var n = 0, hid = 0;
   (state.doc.sections || []).forEach(function (s) {
+    if (s.hidden) { hid++; return; } // 隐藏章节整体计 1，内部不再重复计
     (s.entries || []).forEach(function (e) {
+      if (e.hidden) { hid++; return; }
       (e.bullets || []).forEach(function (b) {
         var len = (b.text || "").replace(/\*\*/g, "").length;
-        if (!b.hidden) n += len;
+        if (!b.hidden) n += len; else hid++;
         var el = document.querySelector("[data-bc='" + b.id + "']");
         if (el) el.textContent = len ? len + " 字" : "";
       });
@@ -356,6 +358,8 @@ function updateChars() {
   });
   var chip = document.getElementById("chars");
   if (chip) chip.textContent = "成果字数 " + n;
+  var hc = document.getElementById("hidden-chip");
+  if (hc) { hc.textContent = "已隐藏 " + hid; hc.classList.toggle("hidden", hid === 0); } // 0 时无痕
 }
 
 /* ---------- 拖拽排序（SortableJS 三层嵌套；无库时退回原生 DnD）---------- */
