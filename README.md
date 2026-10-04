@@ -46,18 +46,24 @@ python export.py jobs/某岗位
 
 ## AI 辅助（人拍板）
 
-1. 左侧导航「AI 助手」（或 `Ctrl+J`）→ 粘贴岗位 JD →「生成建议」（写入 `data/ai-request.json`）
-2. 点「📋 复制提示词」，发给你的 AI agent：**"读 data/ai-request.json，生成 ai-suggestion"**
-3. 建议文件生成后会**自动出现**在面板里（无需手动刷新；等待中再点「生成建议」= 取消）→ 逐条点「✓ 应用」（可撤销）
+三步闭环，全程有反馈：
+
+1. 左侧导航「AI 助手」（或 `Ctrl+J`）→ 粘贴岗位 JD
+2. 点「**发起 AI 优化**」——一次点击完成：写入请求文件（含 JD、简历全文、输出协议与给 agent 的完整指令）+ **提示词自动复制**到剪贴板；面板顶部三步引导条随进度打勾，按钮进入「⏳ 已等待 Ns · 点击取消」秒表态
+3. 到你的 AI agent（任意新会话均可）粘贴运行——提示词已把项目路径、建议文件格式、质量要求、禁止改简历文件全部写明，agent 照做即可；写完 `data/ai-suggestion.json` 的瞬间，建议**自动出现**在面板里
+
+采纳：逐条「✓ 应用」（应用后自动滚动定位到对应卡片）或「✓ 全部应用」（一次撤销步整批回退）；每条可撤销。点「发起」时旧建议自动作废，不会跨文档串台——建议文件带 `for` 字段标记归属，打开别的文档看到旧建议时面板会明确提示而不是让你误应用。
 
 建议文件协议 `data/ai-suggestion.json`：
 ```json
-{"items": [
+{"for": "jobs/2026-XX-XX_公司_岗位",
+ "items": [
   {"type": "rewrite", "target": "b-xxx", "text": "改写后的成果（含**加粗**）", "reason": "对齐 JD 关键词"},
   {"type": "hide",    "target": "e-xxx", "reason": "与该 JD 无关"},
   {"type": "note",    "text": "整体建议…"}
 ]}
 ```
+`type` 取值：`rewrite` 改写（text 填完整文本）/ `hide` 建议隐藏 / `show` 建议恢复 / `note` 说明；`target` 必须用请求文件 `doc` 里对应的条目 id。agent 写坏格式时面板会诚实报错（绝不假成功）。
 
 ## 数据模型（data/*.json）
 
@@ -85,6 +91,8 @@ python export.py jobs/某岗位
 ├── 启动/停止 .bat                  # 桌面端快速启动/停止
 ├── app/                           # 编辑器（index/editor/preview/print）
 ├── tools/printer.py               # 无头打印引擎（argv 全字面量）
+├── tools/verify.py                # 自动验证清单：python tools/verify.py（改动后、提交前必跑）
+├── PROJECT.md                     # 项目手册：铁律 / 研发闭环 / 迭代记录 / 路线图
 └── data/                          # 主简历.json + jobs/*.json + 照片 + AI 请求/建议
 ```
 

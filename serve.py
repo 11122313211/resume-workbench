@@ -12,7 +12,7 @@ API：
     POST /api/delete {name}         删除岗位副本（主简历不可删，连带清理同名 PDF）
     POST /api/newjob {name}         复制主简历创建岗位副本
     POST /api/export {name}         渲染并打印 A4 PDF
-    POST /api/ai-request {name, jd} 写入 AI 请求文件（由用户的 AI agent 处理）
+    POST /api/ai-request {name, jd} 写入 AI 请求文件（含给 agent 的完整指令 agentPrompt 与输出协议）
     GET  /api/ai-suggestion         读 AI 建议文件
     POST /api/upload-photo?ext=.jpg 上传照片到 data/（编辑器文件对话框配套，字节体）
 """
@@ -205,11 +205,52 @@ class Handler(SimpleHTTPRequestHandler):
 
             if parsed.path == "/api/ai-request":
                 name = safe_name(body["name"])
-                req = {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "name": name,
-                       "jd": body.get("jd", ""), "doc": read_doc(name)}
+                doc = read_doc(name)
+                mode = "job" if doc.get("kind") == "job" else "master"
+                # 新请求作废旧建议：前端不再看到上一轮结果
+                stale = DATA / "ai-suggestion.json"
+                if stale.is_file():
+                    stale.unlink()
+                # 输出协议：写进请求文件，任何全新 agent 会话照此即可干对活
+                output = {
+                    "file": "data/ai-suggestion.json",
+                    "format": {
+                        "for": name,
+                        "items": [
+                            {"type": "rewrite|hide|show|note",
+                             "target": "简历条目的 id（见 doc）",
+                             "text": "type=rewrite 时的完整改写文本",
+                             "reason": "一句话理由"},
+                        ],
+                    },
+                }
+                mode_tip = ("岗位版目标是 A4 一页，优先用 hide 隐藏与岗位弱相关的条目。"
+                            if mode == "job" else
+                            "主简历求全，重点是结构完善与表达提升。")
+                agent_prompt = (
+                    "你是资深简历优化顾问。项目根目录（绝对路径）：" + str(ROOT) + "\n"
+                    "请严格按以下三步操作：\n"
+                    "1. 读取 data/ai-request.json：jd 是岗位 JD 原文，doc 是简历全文，"
+                    "每个章节/条目/成果都带 id（建议的 target 必须使用这些 id）。\n"
+                    "2. 只产出优化建议，禁止修改任何简历文件：data/主简历.json 与 data/jobs/*.json 一律不要写。\n"
+                    "3. 把建议写入 data/ai-suggestion.json（UTF-8 编码的 JSON），格式如下"
+                    "（for 必须是本文档名 \"" + name + "\"）：\n"
+                    + json.dumps(output["format"], ensure_ascii=False, indent=2) + "\n"
+                    "质量要求：\n"
+                    "- type 取值：rewrite=改写（text 填完整改写文本）、hide=建议隐藏、show=建议恢复显示、note=说明。\n"
+                    "- rewrite 的 text 以动词开头并包含量化结果；每条 reason 用一句话说明理由。\n"
+                    "- " + mode_tip + "\n"
+                    "- 共 5~10 条，宁缺毋滥。\n"
+                    "写完 data/ai-suggestion.json 即结束，工作台会自动检测并展示建议。"
+                )
+                req = {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "name": name, "mode": mode,
+                       "jd": body.get("jd", ""), "doc": doc, "for": name,
+                       "output": output, "agentPrompt": agent_prompt}
                 p = DATA / "ai-request.json"
-                p.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
-                return self._json({"ok": True, "file": "/data/ai-request.json"})
+                tmp = p.with_suffix(".tmp")  # 原子写：tmp + replace，agent 不会读到半截文件
+                tmp.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
+                tmp.replace(p)
+                return self._json({"ok": True, "file": "/data/ai-request.json", "agentPrompt": agent_prompt})
         except ValueError as e:
             return self._json({"ok": False, "error": str(e)}, 400)
         except FileNotFoundError:

@@ -29,6 +29,21 @@ function toast(msg, ms, action) {
   clearTimeout(t.__t); t.__t = setTimeout(function () { t.style.display = "none"; }, ms || 2600);
   if (action) document.getElementById("toast-act").onclick = function () { t.style.display = "none"; action.fn(); };
 }
+function copyText(txt) { // 复制到剪贴板：clipboard API 优先，execCommand 兜底；失败 reject 由调用方兜底
+  return new Promise(function (resolve, reject) {
+    function fallback() {
+      var t = document.createElement("textarea");
+      t.value = txt; t.style.position = "fixed"; t.style.opacity = "0";
+      document.body.appendChild(t); t.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      t.remove();
+      ok ? resolve() : reject(new Error("复制失败"));
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(resolve, fallback);
+    else fallback();
+  });
+}
 function setSaveState(txt, cls) {
   var el = document.getElementById("save-state");
   el.textContent = txt;
@@ -126,7 +141,7 @@ function showOnboard(force) {
   ov.innerHTML = "<div class='modal onboard'><div class='m-title'>👋 三步上手简历工作台</div>" +
     "<ol class='ob-steps'>" +
     "<li><b>维护主简历</b>：左侧卡片增删改、拖拽排序，右侧 A4 实时预览，完整版可以是 2 页</li>" +
-    "<li><b>投递取舍</b>：左侧导航「新建岗位副本」→ AI 助手里贴 JD 点「生成建议」→ 逐条采纳、👁 取舍，标尺自动收敛一页</li>" +
+    "<li><b>投递取舍</b>：AI 助手里贴 JD、点「发起 AI 优化」（提示词自动复制）→ 到你的 AI agent 粘贴运行 → 回来建议自动出现，一键或逐条采纳</li>" +
     "<li><b>一键导出</b>：左侧导航「导出 PDF」得到与预览 1:1 的 A4 打印版</li>" +
     "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· 点右侧预览可定位左侧卡片 · ? 重看本引导</p>" +
     "<div class='m-row'><button class='btn primary' data-m='ok'>开始使用</button></div></div>";
@@ -913,66 +928,127 @@ function bindEvents() {
     else if (k === "b" && e.target && e.target.tagName === "TEXTAREA") { e.preventDefault(); toggleBold(e.target); }
   });
 
-  /* AI 抽屉：生成建议（等待中可点击取消）+ 复制提示词 + 自动轮询（开关走侧栏/Ctrl+J） */
+  /* AI 抽屉：三步闭环（贴 JD → 发起即复制 → agent 运行后建议自动出现）+ 全部应用（开关走侧栏/Ctrl+J） */
   document.getElementById("ai-close").addEventListener("click", function () { toggleAIPanel(false); });
-  document.getElementById("ai-jd").addEventListener("input", function () { aiJdFor = state.name; });
+  document.getElementById("ai-jd").addEventListener("input", function () { aiJdFor = state.name; updateAISteps(); });
   document.getElementById("ai-request").addEventListener("click", function () {
     var btn = this;
-    if (aiWaiting) { // 等待中再点 = 取消等待，可改 JD 重新生成
-      aiWaiting = false; clearTimeout(aiWaitTO); stopAIPoll();
-      btn.textContent = "生成建议";
-      toast("已取消等待。建议文件就绪后可点 ↻ 查看");
+    if (aiWaiting) { // 等待中再点 = 取消等待；提示词已在缓存，仍可点「复制提示词」手动复制
+      endAIWait("发起 AI 优化");
+      stopAIPoll();
+      toast("已取消等待");
       return;
     }
+    if (aiReqBusy) return; // 上一次请求还在写入，防连点
     var jd = document.getElementById("ai-jd").value.trim();
-    if (!jd) { toast("请先粘贴 JD 原文"); return; }
-    btn.disabled = true; btn.textContent = "⏳ 写入请求…";
-    postJSON("/api/ai-request", { name: state.name, jd: jd }).then(function (r) {
-      if (!r.ok) throw new Error(r.error || "写入失败");
+    if (!jd) { toast("请先粘贴岗位 JD 原文"); return; }
+    var reqName = state.name; // 捕获归属：响应回来时若已切文档则作废
+    aiReqBusy = true;
+    btn.disabled = true; btn.classList.remove("waiting"); btn.textContent = "⏳ 写入请求…";
+    postJSON("/api/ai-request", { name: reqName, jd: jd }).then(function (r) {
+      aiReqBusy = false;
+      if (state.name !== reqName) { endAIWait("发起 AI 优化"); return; } // 请求期间切了文档：结果不留尾巴
+      if (!r.ok) { endAIWait("发起 AI 优化"); toast("写入失败：" + (r.error || "未知错误")); return; }
       if (!state.doc.job) state.doc.job = {};
       state.doc.job.jdText = jd; // JD 随文档落盘，刷新/切档不丢、不串
       aiJdFor = state.name;
       scheduleSave();
+      aiPromptCache = r.agentPrompt || ""; // 提示词入缓存：复制按钮解锁，随时可再复制
+      document.getElementById("ai-copy").disabled = false;
       aiSig = null; // 让轮询能识别到"新文件/更新"
-      aiWaiting = true;
-      btn.disabled = false; btn.textContent = "⏳ 等待 agent 生成…（点击取消）";
-      toast("AI 请求已写入 data/ai-request.json\n到你的 AI agent 里说：读 ai-request 生成建议");
-      startAIPoll();
-      clearTimeout(aiWaitTO);
-      aiWaitTO = setTimeout(function () { // 2 分钟无果自动解除等待，避免永久卡死
-        if (!aiWaiting) return;
-        aiWaiting = false;
-        btn.textContent = "重新生成";
-        toast("等待超时。可确认 agent 是否完成，然后点「重新生成」或 ↻");
-      }, 120000);
+      setAIWaiting(true); // 按钮秒表 + 120s 超时兜底
+      if (!document.getElementById("ai-panel").classList.contains("ai-closed")) startAIPoll(); // 面板已关则不开轮询，重开时自动恢复
+      loadSuggestions(); // 服务端已作废旧建议：立即刷新，不等下一次轮询
+      if (!aiPromptCache) { toast("请求已写入 data/ai-request.json，但提示词为空——请重新发起", 8000); return; }
+      copyText(aiPromptCache).then(function () { // 发起即自动复制（第②步零操作）
+        toast("请求已写入，提示词已自动复制 ✓\n到你的 AI agent 粘贴运行即可");
+      }).catch(function () {
+        toast("请求已写入 data/ai-request.json。自动复制失败，可点「复制提示词」重试", 8000);
+      });
     }).catch(function (e) {
-      btn.disabled = false; btn.textContent = "生成建议";
-      toast("写入失败：" + e.message);
+      aiReqBusy = false;
+      endAIWait("发起 AI 优化");
+      toast("写入失败：" + (e && e.message ? e.message : "") + "\n本地服务可能没在运行——双击「启动简历工作台.bat」后再试", 8000);
     });
   });
   document.getElementById("ai-copy").addEventListener("click", function () {
-    var tip = "读 data/ai-request.json，生成 ai-suggestion";
-    function done() { toast("提示词已复制，粘贴到你的 AI agent 即可"); }
-    function fallback() { // clipboard API 不可用时兜底
-      var t = document.createElement("textarea"); t.value = tip;
-      document.body.appendChild(t); t.select();
-      try { document.execCommand("copy"); done(); } catch (e) { toast("复制失败，请手动发送：" + tip); }
-      t.remove();
-    }
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tip).then(done, fallback);
-    else fallback();
+    if (!aiPromptCache) return; // 无缓存时按钮本就禁用，双保险
+    copyText(aiPromptCache).then(function () {
+      toast("提示词已复制，粘贴到你的 AI agent 即可");
+    }).catch(function () {
+      toast("复制失败，请手动复制提示词全文：\n" + aiPromptCache, 10000);
+    });
+  });
+  document.getElementById("ai-apply-all").addEventListener("click", function () {
+    var box = document.getElementById("ai-cards");
+    var items = box.__items || [];
+    var batch = [];
+    items.forEach(function (it, i) {
+      if (!it || it.type === "note" || state.appliedAI[i]) return;
+      if (!findAny(it.target || "")) return; // 目标缺失的跳过，不阻塞整批
+      applyItem(it);
+      state.appliedAI[i] = true;
+      batch.push(i);
+    });
+    if (!batch.length) { toast("没有可应用的建议（可能均已应用，或目标条目已不在当前文档中）"); return; }
+    afterChange(true, true); // 整批只算一个撤销步
+    locateCard(items[batch[0]].target); // 定位到第一条
+    toast("已应用 " + batch.length + " 条建议", 8000, { label: "撤销", fn: function () {
+      batch.forEach(function (i) { delete state.appliedAI[i]; });
+      undo(); loadSuggestions();
+    } });
+    loadSuggestions();
   });
   document.getElementById("ai-refresh").addEventListener("click", loadSuggestions);
 }
 
 /* ---------- AI 面板开关与自动轮询 ---------- */
 var aiPollTimer = null, aiSig = null, aiWaiting = false, aiWaitTO = null, aiJdFor = null; // aiJdFor=JD 输入框内容归属的文档
-function resetAIRequestState() { // 切文档/重置：解除等待态
-  aiWaiting = false;
-  clearTimeout(aiWaitTO);
+var aiPromptCache = null, aiSecTimer = null, aiReqBusy = false, aiHaveValidSug = false; // 提示词缓存/秒表/请求写入中/当前文档有可用建议
+function setAIWaiting(on) { // 等待态：1s 秒表更新按钮文案 + 120s 超时兜底
+  aiWaiting = on;
+  clearInterval(aiSecTimer); aiSecTimer = null;
+  clearTimeout(aiWaitTO); aiWaitTO = null;
+  var btn = document.getElementById("ai-request");
+  if (!btn) return;
+  btn.classList.toggle("waiting", on);
+  if (!on) return;
+  var t0 = Date.now();
+  btn.disabled = false;
+  btn.textContent = "⏳ 已等待 0s · 点击取消";
+  aiSecTimer = setInterval(function () {
+    btn.textContent = "⏳ 已等待 " + Math.round((Date.now() - t0) / 1000) + "s · 点击取消";
+  }, 1000);
+  aiWaitTO = setTimeout(function () { // 两分钟无果自动解除等待，避免永久卡死
+    if (!aiWaiting) return;
+    endAIWait("重新生成");
+    toast("已等待 120 秒仍未检测到新建议。\n请确认你的 AI agent 是否已运行完成：完成后点 ↻ 读取，或点「重新生成」再发起", 9000);
+  }, 120000);
+}
+function endAIWait(label) { // 解除等待并复位按钮文案；请求写入中则不抢按钮状态
+  setAIWaiting(false);
+  if (aiReqBusy) return;
+  var btn = document.getElementById("ai-request");
+  if (btn && label) { btn.disabled = false; btn.textContent = label; }
+}
+function resetAIRequestState() { // 切文档/重置：等待、秒表、轮询、提示词缓存全部清空，一切干净
+  setAIWaiting(false);
   stopAIPoll();
+  aiPromptCache = null;
+  aiHaveValidSug = false;
   var rb = document.getElementById("ai-request");
-  if (rb) { rb.disabled = false; rb.textContent = "生成建议"; }
+  if (rb && !aiReqBusy) { rb.disabled = false; rb.textContent = "发起 AI 优化"; }
+  var cp = document.getElementById("ai-copy");
+  if (cp) cp.disabled = true;
+  updateAISteps();
+}
+function updateAISteps() { // 三步引导：完成的步骤打勾（切文档/取消后同步回退）
+  var steps = $$("#ai-steps .ai-step");
+  if (!steps.length) return;
+  var jd = document.getElementById("ai-jd");
+  steps[0].classList.toggle("done", !!(jd && jd.value.trim()));
+  steps[1].classList.toggle("done", aiWaiting || !!aiPromptCache);
+  steps[2].classList.toggle("done", aiHaveValidSug);
 }
 function toggleAIPanel(open) {
   var p = document.getElementById("ai-panel");
@@ -985,7 +1061,8 @@ function toggleAIPanel(open) {
       aiJdFor = state.name;
     }
     loadSuggestions();
-    if (aiWaiting) startAIPoll(); // 等待期间关过面板：重开自动恢复轮询
+    updateAISteps();
+    startAIPoll(); // 面板开着就轮询（本地请求零成本），agent 何时写完都能自动出现
   } else stopAIPoll();
 }
 function stopAIPoll() { clearInterval(aiPollTimer); aiPollTimer = null; }
@@ -994,32 +1071,71 @@ function startAIPoll() { // 面板开启期间轮询建议文件（本地请求�
   aiPollTimer = setInterval(function () {
     getJSON("/api/ai-suggestion").then(function (r) {
       var items = (r && r.items) || [];
-      var sig = items.length + ":" + items.map(function (it) {
+      var arr = Array.isArray(items) ? items : [];
+      var sig = arr.length + ":" + arr.map(function (it) {
         return it.type + "|" + (it.target || "") + "|" + (it.text || it.reason || "");
       }).join(";");
       if (sig !== aiSig) {
         loadSuggestions();
-        if (items.length) toast("AI 建议已就绪 ✓");
+        if (arr.length && r && r.for === state.name) toast("AI 建议已就绪 ✓");
       }
     }).catch(function () {}); // 文件尚不存在：静默等待下一次轮询
   }, 2500);
 }
 
 /* ---------- AI 建议 ---------- */
+function applyItem(it) { // 把一条建议写入文档模型（调用方负责 afterChange/撤销/重渲染）
+  var found = findAny(it.target || "");
+  if (!found) return false;
+  if (it.type === "rewrite") found.obj.text = it.text;
+  else if (it.type === "hide") found.obj.hidden = true;
+  else if (it.type === "show") found.obj.hidden = false;
+  return true;
+}
 function loadSuggestions() {
   getJSON("/api/ai-suggestion").then(function (r) {
     var box = document.getElementById("ai-cards");
-    var items = r.items || [];
-    aiSig = items.length + ":" + items.map(function (it) {
+    var toolbar = document.getElementById("ai-toolbar");
+    var count = document.getElementById("ai-count");
+    var raw = (r && r.items) || [];
+    var arr = Array.isArray(raw) ? raw : [];
+    aiSig = arr.length + ":" + arr.map(function (it) {
       return it.type + "|" + (it.target || "") + "|" + (it.text || it.reason || "");
     }).join(";");
-    var rb = document.getElementById("ai-request");
-    if (items.length && rb) { rb.disabled = false; rb.textContent = "生成建议"; aiWaiting = false; clearTimeout(aiWaitTO); }
-    if (!items.length) {
-      box.innerHTML = "<div class='ai-empty'>暂无建议。点上方「生成建议」写入请求 → 点「📋 复制提示词」发给你的 AI agent；<br>建议文件生成后会自动出现在这里</div>";
+    if (!Array.isArray(raw)) { // items 不是数组：协议被破坏，如实告知
+      aiHaveValidSug = false; box.__items = null;
+      endAIWait("发起 AI 优化");
+      toolbar.classList.add("hidden");
+      box.innerHTML = "<div class='ai-error'>建议文件格式无法解析（items 不是数组）。请重新点「发起 AI 优化」生成新请求，再让 agent 重写 data/ai-suggestion.json</div>";
+      updateAISteps();
       return;
     }
-    box.innerHTML = items.map(function (it, i) {
+    var wrong = r && r.for ? r.for !== state.name : arr.length > 0; // for 缺失且有内容的旧文件同样视为错档
+    if (wrong) { // 属于其他文档或旧格式：不渲染建议、无应用按钮
+      aiHaveValidSug = false; box.__items = null;
+      endAIWait("发起 AI 优化");
+      toolbar.classList.add("hidden");
+      box.innerHTML = "<div class='ai-wrongdoc'>这份建议属于其他文档或旧格式，不是当前文档。点「发起 AI 优化」即可为当前文档重新生成</div>";
+      updateAISteps();
+      return;
+    }
+    if (!arr.length) { // 无建议：空状态对接新三步
+      aiHaveValidSug = false; box.__items = null;
+      toolbar.classList.add("hidden");
+      box.innerHTML = "<div class='ai-empty'>还没有建议。按上面 3 步走：贴 JD → 点「发起 AI 优化」→ 到你的 AI agent 粘贴运行；<br>建议写好后会自动出现在这里（也可点 ↻ 手动刷新）</div>";
+      updateAISteps();
+      return;
+    }
+    /* 有建议：解除等待态，渲染卡片 */
+    aiHaveValidSug = true;
+    endAIWait("发起 AI 优化");
+    box.__items = arr;
+    var applicable = arr.some(function (it, i) {
+      return it && it.type !== "note" && !state.appliedAI[i] && findAny(it.target || "");
+    });
+    toolbar.classList.toggle("hidden", !applicable);
+    if (count) count.textContent = arr.length + " 条建议";
+    box.innerHTML = arr.map(function (it, i) {
       var applied = state.appliedAI[i];
       var tag = it.type === "rewrite" ? "改写" : it.type === "hide" ? "建议隐藏" : it.type === "show" ? "建议恢复" : "说明";
       var target = findAny(it.target || "");
@@ -1031,29 +1147,31 @@ function loadSuggestions() {
         (it.type !== "note" && !applied ? "<button class='btn small apply-btn' data-ai='" + i + "'>✓ 应用</button>" : applied ? "（已应用）" : "") +
         "</div>";
     }).join("");
-    box.__items = items;
     $("[data-ai]", box).forEach(function (b) {
       b.addEventListener("click", function () {
         var i2 = +b.getAttribute("data-ai"), it = box.__items[i2];
-        var found = findAny(it.target);
+        var found = findAny(it.target || "");
         if (!found) { // 目标可能已被删改：如实告知，不假成功
-          toast("目标条目不存在（文档可能已改动），建议未应用");
+          toast("第 " + (i2 + 1) + " 条建议的目标条目已不在当前文档中（文档可能已改动）");
           return;
         }
-        if (it.type === "rewrite") found.obj.text = it.text;
-        else if (it.type === "hide") found.obj.hidden = true;
-        else if (it.type === "show") found.obj.hidden = false;
+        applyItem(it);
         state.appliedAI[i2] = true;
         afterChange(true, true);
+        locateCard(it.target);
         toast("已应用 AI 建议", 8000, { label: "撤销", fn: function () {
           delete state.appliedAI[i2]; undo(); loadSuggestions();
         } });
         loadSuggestions();
       });
     });
-  }).catch(function () {
+    updateAISteps();
+  }).catch(function () { // 服务不可达：诚实文案，不假装没有建议
+    aiHaveValidSug = false;
+    var toolbar = document.getElementById("ai-toolbar");
+    if (toolbar) toolbar.classList.add("hidden");
     document.getElementById("ai-cards").innerHTML =
-      "<div class='ai-empty'>还没有 ai-suggestion.json。先「写入 AI 请求」，然后在你的 AI agent 里说：读 ai-request 生成建议</div>";
+      "<div class='ai-error'>读取建议失败：本地服务可能没在运行——双击「启动简历工作台.bat」后再试</div>";
   });
 }
 

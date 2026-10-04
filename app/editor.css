@@ -152,7 +152,15 @@ body.splitting { cursor: col-resize; user-select: none; }
 #ai-panel.ai-closed { transform: translateX(110%); visibility: hidden;
                       transition: transform .25s ease, visibility 0s .25s; }
 .ai-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.ai-tip { font-size: 12px; color: #667; background: #f4f6f9; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+/* 三步引导：完成的步骤打勾（.done 由 JS 同步） */
+#ai-steps { background: #f4f6f9; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;
+            display: flex; flex-direction: column; gap: 7px; }
+.ai-step { position: relative; font-size: 12.5px; color: #667; line-height: 1.55; padding-left: 24px; }
+.ai-step::before { content: attr(data-step); position: absolute; left: 0; top: 2px; width: 17px; height: 17px;
+                   border-radius: 50%; background: #fff; border: 1px solid #c4ccd6; color: #667;
+                   font-size: 10.5px; line-height: 15px; text-align: center; }
+.ai-step.done { color: #176b33; }
+.ai-step.done::before { content: "✓"; background: #e2f4e8; border-color: #8fcda2; color: #176b33; font-weight: 700; }
 #ai-jd { width: 100%; min-height: 110px; resize: vertical; font-size: 12.5px; }
 .ai-row { display: flex; gap: 8px; margin: 8px 0; }
 .ai-card { border: 1px solid #dbe1e8; border-radius: 9px; padding: 8px 10px; margin-top: 8px; font-size: 12.5px; }
@@ -160,6 +168,16 @@ body.splitting { cursor: col-resize; user-select: none; }
 .ai-card.applied { opacity: .55; }
 .ai-card .apply-btn { margin-top: 6px; }
 .ai-empty { color: #889; font-size: 12.5px; text-align: center; padding: 18px 0; }
+/* 建议工具行：全部应用 + 计数 */
+#ai-toolbar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+#ai-count { font-size: 12px; color: #667; }
+/* 异常建议卡：格式坏（红）/ 错档（琥珀），与普通建议卡区分 */
+.ai-error, .ai-wrongdoc { border-radius: 9px; padding: 8px 10px; margin-top: 8px; font-size: 12.5px; line-height: 1.55; }
+.ai-error { border: 1px solid #e4b6b6; background: #fdf3f3; color: #a12626; }
+.ai-wrongdoc { border: 1px solid #edcd96; background: #fdf0dd; color: #7a4b00; }
+/* 等待中的发起按钮：轻微呼吸感 */
+.btn.waiting { animation: aiBreath 1.6s ease-in-out infinite; }
+@keyframes aiBreath { 0%, 100% { opacity: 1; } 50% { opacity: .68; } }
 
 #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 99;
          background: #2b2f36; color: #fff; padding: 9px 18px; border-radius: 8px; font-size: 13px;

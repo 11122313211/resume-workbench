@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>简历可视化编辑工作台</title>
-<link rel="stylesheet" href="editor.css?v=6">
+<link rel="stylesheet" href="editor.css?v=7">
 </head>
 <body>
 <!-- 悬浮侧边导航：收起为图标栏，悬停/键盘聚焦展开（同「侧边菜单」demo 交互） -->
@@ -82,12 +82,20 @@
     <strong><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ai-ic"><rect x="5" y="9" width="14" height="10" rx="3"/><path d="M12 9V5M9.5 5h5"/><circle cx="9.5" cy="13.5" r=".9" fill="currentColor" stroke="none"/><circle cx="14.5" cy="13.5" r=".9" fill="currentColor" stroke="none"/></svg> AI 助手</strong>
     <button id="ai-close" class="btn small">✕</button>
   </div>
-  <p class="ai-tip">1. 粘贴岗位 JD → 点「生成建议」写入请求文件；2. 点「📋 复制提示词」发给你的 AI agent；3. 建议生成后会<b>自动出现</b>在下方，逐条采纳。</p>
+  <div id="ai-steps">
+    <div class="ai-step" data-step="1">粘贴岗位 JD 原文</div>
+    <div class="ai-step" data-step="2">点「发起 AI 优化」——提示词自动复制</div>
+    <div class="ai-step" data-step="3">到你的 AI agent 粘贴运行，建议写好后自动出现在下面</div>
+  </div>
   <textarea id="ai-jd" placeholder="粘贴岗位 JD 原文…"></textarea>
   <div class="ai-row">
-    <button id="ai-request" class="btn primary">生成建议</button>
-    <button id="ai-copy" class="btn" title="复制发给 AI agent 的提示词"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ai-ic"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> 复制提示词</button>
+    <button id="ai-request" class="btn primary">发起 AI 优化</button>
+    <button id="ai-copy" class="btn" disabled title="发起后提示词自动复制；也可在此手动复制">复制提示词</button>
     <button id="ai-refresh" class="btn small" title="手动重新读取建议文件">↻</button>
+  </div>
+  <div id="ai-toolbar" class="hidden">
+    <button id="ai-apply-all" class="btn small">✓ 全部应用</button>
+    <span id="ai-count"></span>
   </div>
   <div id="ai-cards"></div>
 </aside>
@@ -95,6 +103,6 @@
 <div id="toast"></div>
 <input type="file" id="photo-file" accept="image/*" class="hidden">
 <script src="vendor/Sortable.min.js?v=6"></script>
-<script src="editor.js?v=7"></script>
+<script src="editor.js?v=8"></script>
 </body>
 </html>
