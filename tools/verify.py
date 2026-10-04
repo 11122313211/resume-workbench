@@ -310,9 +310,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=11" in page and "editor.css?v=10" in page
+    ok = "editor.js?v=12" in page and "editor.css?v=10" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=11 与 editor.css?v=10" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=12 与 editor.css?v=10" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -724,6 +724,17 @@ var CASES = {
     var isMaster = q("#rail-docname").textContent === "主简历";
     var n = idoc().querySelectorAll("#cards .show-toggle:not(.off)").length;
     log("master-no-eye", isMaster && n === 0, "当前文档=" + q("#rail-docname").textContent + " 可见行眼睛 " + n + "（应为 0）");
+  },
+
+  "save-feedback": async function () {  /* 保存反馈就地化：状态行 ✓已保存 → 2s 衰减回就绪，全程不弹 toast */
+    await loadEditor(DOC);
+    var st = await wwait(function () { return idoc().getElementById("save-state"); }, 6000, "状态行");
+    st.click();
+    await wwait(function () { return st.textContent === "✓ 已保存"; }, 8000, "状态行确认已保存");
+    var t1 = idoc().getElementById("toast").style.display;
+    log("save/inline", t1 !== "block", "不弹 toast（toast display=" + t1 + "）");
+    await wwait(function () { return st.textContent === "就绪"; }, 6000, "归于就绪");
+    log("save/decay", true, "状态行 2s 后衰减回中性「就绪」");
   }
 };
 
@@ -868,7 +879,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -940,6 +951,12 @@ def sec_headless():
         headless_case("ai-wrongdoc", prepare=prep_wrong)
 
         headless_case("master-no-eye")  # 主简历可见行无眼睛：只读用例，无需副本
+
+        try:
+            full_s, _ids_s = make_copy("-s")
+            headless_case("save-feedback", doc=full_s)
+        except Exception as e:
+            add("HEADLESS", "save-feedback", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

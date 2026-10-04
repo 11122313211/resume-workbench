@@ -51,6 +51,15 @@ function setSaveState(txt, cls) {
   var dot = document.getElementById("rail-dot");
   if (dot) dot.className = "rail-dot" + (cls && cls !== "ok" ? " " + cls : ""); // 成功即无痕：绿点永不常驻，只有忙/失败以图标徽标浮现
 }
+var okTimer = null;
+function flashOk(txt) { // 成功类反馈就地化：状态行短暂表态后归于中性「就绪」，默认安静，不弹 toast
+  setSaveState(txt, "ok");
+  clearTimeout(okTimer);
+  okTimer = setTimeout(function () {
+    var el = document.getElementById("save-state");
+    if (el.textContent === txt) setSaveState("就绪", ""); // 期间有新状态则不覆盖
+  }, 2000);
+}
 
 /* ---------- 撤销 / 重做（Memento 全量快照，600ms 合帧）---------- */
 function snap() { return JSON.stringify(state.doc); }
@@ -79,13 +88,13 @@ function undo() {
   if (!undoStack.length) return;
   redoStack.push(snap());
   applySnap(undoStack.pop());
-  setSaveState("已撤销 ✓", "ok");
+  flashOk("已撤销 ✓");
 }
 function redo() {
   if (!redoStack.length) return;
   undoStack.push(snap());
   applySnap(redoStack.pop());
-  setSaveState("已重做 ✓", "ok");
+  flashOk("已重做 ✓");
 }
 
 /* ---------- 轻量弹窗 ---------- */
@@ -563,8 +572,8 @@ function saveFailToast() {
 function doSave(name, doc) {
   setSaveState("✎ 修改中…", "busy");
   return postJSON("/api/save", { name: name, doc: doc }).then(function (r) {
-    setSaveState(r.ok ? "✓ 已保存" : "⚠ 保存失败", r.ok ? "ok" : "warn");
-    if (!r.ok) saveFailToast();
+    if (r.ok) flashOk("✓ 已保存");
+    else { setSaveState("⚠ 保存失败", "warn"); saveFailToast(); }
   }).catch(function () {
     setSaveState("⚠ 保存失败", "warn"); saveFailToast();
   });
@@ -783,8 +792,7 @@ function bindEvents() {
   /* 侧边导航：事件委托分发（文档/删除副本/新建副本/AI/保存/导出/引导/图钉） */
   function saveNow() {
     pendingSave = { name: state.name, doc: state.doc };
-    flushSave();
-    toast("已保存");
+    flushSave(); // 反馈就在状态行本身：就绪 → ✎修改中 → ✓已保存 → 2s 后归于就绪，不弹 toast
   }
   function exportNow(navBtn) {
     function go() {
@@ -794,7 +802,7 @@ function bindEvents() {
         return postJSON("/api/export", { name: state.name });
       }).then(function (r) {
         if (navBtn) navBtn.disabled = false;
-        setSaveState("✓ 已保存", "ok");
+        flashOk("✓ 已保存");
         if (r.ok) { toast("PDF 已导出：" + r.pdf); window.open(r.pdf, "_blank"); }
         else toast("导出失败：" + (r.error || "未知错误"));
       }).catch(function (e) { if (navBtn) navBtn.disabled = false; setSaveState("就绪"); toast("导出失败：" + e.message); });
