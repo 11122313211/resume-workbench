@@ -112,17 +112,22 @@ body.splitting { cursor: col-resize; user-select: none; }
 .row + .row { margin-top: 6px; }
 .meta-input { font-size: 12px; color: #555; }
 .tags-input { font-size: 12px; color: #777; font-family: Consolas, monospace; }
+.card .row input:not(.meta-input):not(.tags-input) { font-size: 13px; } /* 正文行输入 13px：时间等较长文本少截断 */
 .card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .card-head .title-in { font-weight: 700; flex: 1; border-color: transparent; background: transparent; }
 .card-head .title-in:hover { border-color: #d5dbe3; }
 .card-head .title-in:focus { border-color: #2f6fed; background: #fff; }
-.ctl { display: flex; gap: 3px; opacity: 0; transition: opacity .12s ease; } /* ▲▼✕ 平时隐去，悬停/键盘聚焦该行才浮现 */
-.card-head:hover .ctl, .row:hover .ctl, .bullet-row:hover .ctl,
-.card-head:focus-within .ctl, .row:focus-within .ctl, .bullet-row:focus-within .ctl { opacity: 1; }
-.ctl button { border: 1px solid #ccd3dc; background: #fff; border-radius: 5px; cursor: pointer;
-              font-size: 12px; line-height: 1; padding: 5px 7px; min-width: 24px; min-height: 24px; color: #555; }
-.ctl button:hover { background: #eef1f5; }
-.ctl button.del:hover { background: #fdeaea; color: #a12626; border-color: #e4b6b6; }
+.ctl-menu { border: 0; background: transparent; cursor: pointer; color: #98a1ad;
+            width: 24px; height: 24px; border-radius: 6px; padding: 0; flex: none;
+            font-size: 15px; line-height: 1; letter-spacing: 1px; } /* 常驻低饱和：不隐藏、不占三个隐藏格 */
+.ctl-menu:hover, .ctl-menu[aria-expanded="true"] { background: #eef1f5; color: #4b5563; }
+.vui-menu { position: fixed; z-index: 90; min-width: 116px; padding: 4px; background: #fff;
+            border: 1px solid #e3e7ee; border-radius: 10px; box-shadow: 0 8px 28px rgba(15,23,42,.16); }
+.vui-menu button { display: block; width: 100%; text-align: left; border: 0; background: none;
+                   padding: 7px 10px; border-radius: 7px; font-size: 13px; color: #374151; cursor: pointer; }
+.vui-menu button:hover { background: #f1f4f8; }
+.vui-menu button.del { color: #a12626; }
+.vui-menu button.del:hover { background: #fdeaea; }
 .handle { cursor: grab; color: #aab2bd; font-size: 14px; user-select: none; padding: 0 2px; }
 .fold-btn { border: 1px solid #ccd3dc; background: #fff; border-radius: 5px; cursor: pointer;
             font-size: 11px; line-height: 1; padding: 5px 7px; min-width: 24px; min-height: 24px; color: #555; flex: none; }

@@ -259,12 +259,9 @@ function renderRail() { // 文档列表平铺在侧栏「文档」组，当前�
 }
 
 /* ---------- 左侧卡片渲染 ---------- */
-function ctlBtns(kind, id, extra) {
-  return "<span class='ctl'>" +
-    "<button data-act='up' data-k='" + kind + "' data-id='" + id + "' title='上移'>▲</button>" +
-    "<button data-act='down' data-k='" + kind + "' data-id='" + id + "' title='下移'>▼</button>" +
-    "<button data-act='del' data-k='" + kind + "' data-id='" + id + "' class='del' title='删除'>✕</button>" +
-    (extra || "") + "</span>";
+function ctlBtns(kind, id) { // 操作集合按钮：常驻低饱和 ⋯，点击弹出 上移/下移/删除 菜单（替代悬停浮现三连钮的死占位）
+  return "<button class='ctl-menu' data-menu data-k='" + kind + "' data-id='" + id +
+    "' title='操作：上移 / 下移 / 删除' aria-haspopup='menu' aria-expanded='false'>⋯</button>";
 }
 function showToggle(kind, id, hidden, job) { // 眼睛切换：显示中=灰描边，隐藏=琥珀实心（隐藏是需要处理的例外），不弹 toast
   var tip = job ? "显示中。点击从本岗位版隐藏（主简历不受影响），再点恢复"
@@ -312,7 +309,7 @@ function renderCards() {
       h += "<div class='row'>" +
            "<span class='handle' draggable='true' data-dragk='entry' data-id='" + en.id + "'>⠿</span>" +
            "<input class='grow' data-k='entry' data-f='left' data-id='" + en.id + "' value=\"" + esc(en.left) + "\" placeholder='主体（公司 / 项目 / 学校）'>" +
-           "<input style='width:118px' data-k='entry' data-f='right' data-id='" + en.id + "' value=\"" + esc(en.right) + "\" placeholder='时间'>" +
+           "<input style='width:140px;flex:none' data-k='entry' data-f='right' data-id='" + en.id + "' value=\"" + esc(en.right) + "\" placeholder='时间'>" +
            showToggle("entry", en.id, en.hidden, job) +
            ctlBtns("entry", en.id) + "</div>";
       h += "<div class='row'><input class='grow meta-input' data-k='entry' data-f='meta' data-id='" + en.id + "' value=\"" + esc(en.meta) + "\" placeholder='灰色说明行：角色 / 团队 / 技术栈（可选）'></div>";
@@ -613,7 +610,7 @@ function bindEvents() {
     afterChange(false);
   });
 
-  cards.addEventListener("click", function (e) {
+  document.addEventListener("click", function (e) { // 委托在 document：⋯ 菜单项（body 级）与卡片按钮共用同一套 act 链
     var btn = e.target.closest("[data-act]");
     if (!btn) return;
     var act = btn.getAttribute("data-act"), k = btn.getAttribute("data-k"), id = btn.getAttribute("data-id");
@@ -706,6 +703,41 @@ function bindEvents() {
       pendingFocus = null;
     }
   });
+
+  /* ⋯ 操作菜单：开合、定位（贴底自动上翻）、外点/滚动/缩放关闭 */
+  var menuEl = null, menuBtn = null;
+  function closeMenu() {
+    if (menuEl) { menuEl.remove(); menuEl = null; }
+    if (menuBtn) { menuBtn.setAttribute("aria-expanded", "false"); menuBtn = null; }
+  }
+  function openMenu(btn) {
+    closeMenu();
+    menuBtn = btn; btn.setAttribute("aria-expanded", "true");
+    var k = btn.getAttribute("data-k"), id = btn.getAttribute("data-id");
+    var m = document.createElement("div");
+    m.className = "vui-menu"; m.setAttribute("role", "menu");
+    m.innerHTML =
+      "<button role='menuitem' data-act='up' data-k='" + k + "' data-id='" + id + "'>▲ 上移</button>" +
+      "<button role='menuitem' data-act='down' data-k='" + k + "' data-id='" + id + "'>▼ 下移</button>" +
+      "<button role='menuitem' class='del' data-act='del' data-k='" + k + "' data-id='" + id + "'>✕ 删除</button>";
+    document.body.appendChild(m); menuEl = m;
+    var r = btn.getBoundingClientRect(), top = r.bottom + 6;
+    if (top + m.offsetHeight > window.innerHeight - 8) top = r.top - m.offsetHeight - 6; // 贴近视口底部改为上翻
+    m.style.top = top + "px";
+    m.style.left = Math.max(8, Math.min(r.right - m.offsetWidth, window.innerWidth - m.offsetWidth - 8)) + "px";
+    var first = m.querySelector("button");
+    if (first) first.focus({ preventScroll: true });
+  }
+  document.addEventListener("click", function (e) { // 注册在 act 委托之后：菜单项先跑动作，这里只负责开关与收尾
+    var t = e.target.closest ? e.target.closest("[data-menu]") : null;
+    if (t) { if (menuBtn === t) closeMenu(); else openMenu(t); return; }
+    if (menuEl) {
+      if (menuEl.contains(e.target)) setTimeout(closeMenu, 0);
+      else closeMenu();
+    }
+  });
+  document.addEventListener("scroll", closeMenu, { capture: true, passive: true });
+  window.addEventListener("resize", closeMenu);
 
   /* 显示/隐藏已改为眼睛按钮（走上方 click 委托），无需 change 监听 */
 
@@ -912,7 +944,8 @@ function bindEvents() {
   document.addEventListener("keydown", function (e) {
     var k = (e.key || "").toLowerCase();
     if (k === "escape") {
-      if (document.getElementById("modal")) { closeModal(); return; } // Esc 只关最顶层：先弹窗后 AI 面板
+      if (document.getElementById("modal")) { closeModal(); return; } // Esc 只关最顶层：先弹窗，再操作菜单，最后 AI 面板
+      if (menuEl) { closeMenu(); return; }
       toggleAIPanel(false);
       return;
     }

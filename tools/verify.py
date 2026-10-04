@@ -310,9 +310,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=8" in page and "editor.css?v=7" in page
+    ok = "editor.js?v=9" in page and "editor.css?v=8" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=8 与 editor.css?v=7" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=9 与 editor.css?v=8" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -657,6 +657,34 @@ var CASES = {
       return s1 && s1.classList.contains("done");
     }, 4000, "step1 加 .done");
     log("ai-steps/step1", true, "JD 输入后 step1 有 .done");
+  },
+
+  menu: async function () {   /* ⋯ 集合菜单：开 → 项齐全 → 动作执行后自动收起 → 删除走确认可取消 → Esc 关闭 */
+    await loadEditor(DOC);
+    var btn = await wwait(function () { return q(".ctl-menu"); }, 8000, "⋯ 按钮");
+    btn.click();
+    var m = await wwait(function () { return q(".vui-menu"); }, 6000, "菜单弹出");
+    var n = m.querySelectorAll("button").length;
+    log("menu/open", n === 3, "菜单项 " + n + "/3");
+    var secId = q("#cards .card.section").getAttribute("data-id");
+    m.querySelector("[data-act='up']").click();
+    await wwait(function () { return !q(".vui-menu"); }, 6000, "动作后自动收起");
+    var okUp = q("#cards .card.section").getAttribute("data-id") === secId;
+    log("menu/act-close", okUp, "上移项可执行（首位为 no-op）且菜单收起、DOM 完整");
+    btn = q(".ctl-menu"); btn.click();
+    m = await wwait(function () { return q(".vui-menu"); }, 6000, "菜单再次弹出");
+    m.querySelector("[data-act='del']").click();
+    var modal = await wwait(function () { return idoc().getElementById("modal"); }, 6000, "删除确认弹窗");
+    log("menu/del-confirm", !!modal.querySelector("[data-m='ok']"), "破坏类确认弹窗出现");
+    modal.querySelector("[data-m='no']").click();
+    await wwait(function () { return !idoc().getElementById("modal"); }, 4000, "取消关闭弹窗");
+    await wwait(function () { return !q(".vui-menu"); }, 4000, "菜单同步收起");
+    log("menu/cancel", true, "取消删除：内容未变");
+    q(".ctl-menu").click();
+    await wwait(function () { return q(".vui-menu"); }, 6000, "菜单第三次弹出");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await wwait(function () { return !q(".vui-menu"); }, 4000, "Esc 收起菜单");
+    log("menu/esc", true, "Esc 关闭菜单");
   }
 };
 
@@ -801,7 +829,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -860,6 +888,12 @@ def sec_headless():
             headless_case("ai-applyall", prepare=prep_a2, doc=full_a2, target=u1, target2=u2)
         except Exception as e:
             add("HEADLESS", "ai-applyall", "FAIL", "准备失败: %s" % e)
+
+        try:
+            full_m, _ids_m = make_copy("-m")
+            headless_case("menu", doc=full_m)
+        except Exception as e:
+            add("HEADLESS", "menu", "FAIL", "准备副本失败: %s" % e)
 
         def prep_wrong():
             write_suggestion({"for": "别的文档", "items": [
