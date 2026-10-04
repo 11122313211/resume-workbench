@@ -418,6 +418,12 @@ def sec_api(server_ok):
         s4 = doc2.get("meta", {}).get("__verify") == "verify"
         allok &= s4
         ev.append("回读__verify=%s" % s4)
+        bdir = DATA / ".backup" / ("jobs_" + name)   # R10：save 覆盖前旧版本自动留底
+        bk = sorted(bdir.glob("*.json")) if bdir.is_dir() else []
+        bdoc = tryjson(read_text(bk[-1])) if bk else {}
+        s4b = bool(bk) and isinstance(bdoc, dict) and bdoc.get("meta", {}).get("__verify") != "verify"
+        add("API", "保存自动留底", "PASS" if s4b else "FAIL",
+            "备份目录=%s 份数=%d 最新份为保存前版本(无__verify)=%s" % (bdir.name if bk else "缺失", len(bk), s4b))
 
     st, body = http_req("POST", "/api/delete", {"name": full})
     r = tryjson(body)

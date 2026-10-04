@@ -8,7 +8,7 @@
 API：
     GET  /api/list                  文档列表
     GET  /api/doc?name=主简历        读文档
-    POST /api/save {name, doc}      保存文档
+    POST /api/save {name, doc}      保存文档（覆盖前旧版本自动留底 data/.backup/，每文档保留 10 份）
     POST /api/delete {name}         删除岗位副本（主简历不可删，连带清理同名 PDF）
     POST /api/newjob {name}         复制主简历创建岗位副本
     POST /api/export {name}         渲染并打印 A4 PDF
@@ -64,9 +64,27 @@ def read_doc(name):
     return json.loads(doc_path(name).read_text(encoding="utf-8"))
 
 
+BACKUP_KEEP = 10  # 每份文档保留的自动备份份数
+
+
+def backup_doc(name, old_text):
+    """覆盖保存前把旧版本留底到 data/.backup/<文档名>/<时间戳>.json，超出 BACKUP_KEEP 自动淘汰。"""
+    bdir = DATA / ".backup" / safe_name(name).replace("/", "_")
+    bdir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S") + "-%03d" % int((time.time() % 1) * 1000)
+    (bdir / (stamp + ".json")).write_text(old_text, encoding="utf-8")
+    for old in sorted(bdir.glob("*.json"))[:-BACKUP_KEEP]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+
+
 def write_doc(name, doc):
     p = doc_path(name)
     p.parent.mkdir(parents=True, exist_ok=True)
+    if p.is_file():  # 只在覆盖已有内容时留底；首次创建没有旧版本可言
+        backup_doc(name, p.read_text(encoding="utf-8"))
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(p)

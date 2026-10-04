@@ -64,14 +64,21 @@ python tools/verify.py
 三层断言，退出码 0 = 全绿：
 
 1. **STATIC**：serve.py 可编译、资源版本参数一致、加粗算法两边同源、数据文件可解析；
-2. **API**：列表/新建副本/保存回读/删除/主简历禁删/AI 请求写入与旧建议作废/**导出 E2E（真实 Edge 打印 → %PDF 头 + A4 MediaBox）**/**照片上传与扩展名白名单**；
+2. **API**：列表/新建副本/保存回读与自动留底/删除/主简历禁删/AI 请求写入与旧建议归档/**导出 E2E（真实 Edge 打印 → %PDF 头 + A4 MediaBox）**/**照片上传与扩展名白名单**；
 3. **HEADLESS UI**（Edge `--dump-dom` + 驱动页）：新建副本全链路、加粗切换、AI 建议应用/全部应用/撤销、错文档与坏格式诚实报错、发起-等待-取消状态机、⋯ 菜单与隐藏压缩、保存反馈就地化。
 
-何时跑：任何 `app/` 或 `serve.py` 改动之后、提交之前。注意事项：verify 会用 `verify-tmp-*` / `verify-ui-*` 前缀的一次性副本做实验并在结束时清理，用户的 `ai-request.json` / `ai-suggestion.json` 会字节级备份还原。
+何时跑：任何 `app/` 或 `serve.py` 改动之后、提交之前。注意事项：verify 会用 `verify-tmp-*` / `verify-ui-*` 前缀的一次性副本做实验并在结束时清理，用户的 `ai-request.json` / `ai-suggestion.json` 会字节级备份还原；本次运行新增的 `ai-history` 归档与 `.backup` 备份也会被清理，用户自己的不动。
 
 **提交闸门（机制强制）**：`tools/hooks/pre-commit` 经 `git config core.hooksPath tools/hooks` 启用，每次提交自动执行 `python tools/verify.py --static`（秒级，STATIC 层：可编译/版本联动/算法同源/数据可解析）——静态契约不过，提交被阻止。动态三层（API/无头 UI）仍需提交前人工全量运行。临时绕过：`git commit --no-verify`。快速验证某次改动：`python tools/verify.py --static`。
 
 ## 5. 迭代记录
+
+### R10 · 2026-10-04 · 保存自动留底（data/.backup 版本轮换）
+
+- **提出**：撤销（Ctrl+Z）只覆盖本次会话的单步链路——保存后关页重开、或改完才发现「上一版更好」，没有任何回退手段；简历是低频但重决策的编辑，误覆盖近似不可逆。
+- **开发**：`write_doc` 覆盖已有文档前，旧版本字节级留底到 `data/.backup/<文档名>/<时间戳>.json`（目录名把 `/` 换成 `_`），每文档保留最近 10 份、超出自动淘汰；首次创建不留底（没有旧版本可言）；恢复方式 = 手动把备份拷回 `data/`（不做 UI，保持零复杂度与人拍板）；`data/.backup/` 已在 .gitignore（R9 顺手加入），用户数据绝不入库。
+- **验证**：生命周期用例扩展出独立断言「保存自动留底」——save 后备份目录生成、最新一份可解析且是保存前版本（不含 __verify 标记）；verify 结束清理 verify-* 备份目录（R9 已备好该清理分支）。全量 24 项全绿（其中一轮 create 用例一次 flake，复跑干净通过）。
+- **结果**：每次保存都有后悔药，备份在本地、不入 git，与隐私铁律一致。回滚：`git revert` 单提交。
 
 ### R9 · 2026-10-04 · AI 建议历史归档（作废前先留底，面板可回看）
 
