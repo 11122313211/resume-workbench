@@ -52,6 +52,7 @@ REQ_FILE = DATA / "ai-request.json"
 SUG_FILE = DATA / "ai-suggestion.json"
 MASTER = DATA / "主简历.json"
 FINGERPRINTS = ("验证 JD", "【验证】", "verify-ui-", "verify-tmp-", "__verify")
+HIST_KEEP = set()      # verify 启动时已存在的建议归档文件名；结束时只清理本次新增的
 
 RESULTS = []           # (section, name, status, evidence)
 SERVER_NOTE = ""       # 服务复用/旧代码提示
@@ -313,9 +314,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=13" in page and "editor.css?v=11" in page
+    ok = "editor.js?v=14" in page and "editor.css?v=12" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=13 与 editor.css?v=11" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=14 与 editor.css?v=12" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -362,8 +363,10 @@ def sec_api(server_ok):
     add("API", "/api/list", "PASS" if ok else "FAIL",
         "http=%s ok=%s docs 含主简历=%s (%s…)" % (st, r.get("ok"), "主简历" in docs, ",".join(docs[:3])))
 
-    # b) ai-request：备份 → 假建议文件 → 请求 → 断言 → 恢复
+    # b) ai-request：备份 → 假建议文件 → 请求 → 断言（含历史归档）→ 恢复
     rb, sb = backup(REQ_FILE), backup(SUG_FILE)
+    hist_dir = DATA / "ai-history"
+    hist_before = {p.name for p in hist_dir.glob("*.json")} if hist_dir.is_dir() else set()
     try:
         write_suggestion({"ok": True, "items": [{"type": "note", "text": "假建议"}]})
         st, body = http_req("POST", "/api/ai-request", {"name": "主简历", "jd": "验证用 JD"})
@@ -372,9 +375,15 @@ def sec_api(server_ok):
         reqdoc = tryjson(REQ_FILE.read_text(encoding="utf-8")) if REQ_FILE.is_file() else {}
         fields_ok = all(k in reqdoc for k in ("for", "mode", "output"))
         sug_gone = not SUG_FILE.is_file()
-        allok = st == 200 and r.get("ok") is True and agent_ok and fields_ok and sug_gone
-        ev = "http=%s ok=%s agentPrompt非空且含ai-suggestion.json=%s 请求文件含for/mode/output=%s 假建议已删=%s" % (
-            st, r.get("ok"), agent_ok, fields_ok, sug_gone)
+        hist_after = {p.name for p in hist_dir.glob("*.json")} if hist_dir.is_dir() else set()
+        new_arch = sorted(hist_after - hist_before)
+        arch_ok = bool(new_arch) and bool(tryjson(read_text(hist_dir / new_arch[0])).get("items"))
+        st3, body3 = http_req("GET", "/api/ai-history")
+        r3 = tryjson(body3)
+        list_ok = st3 == 200 and r3.get("ok") is True and len(r3.get("items") or []) >= 1
+        allok = st == 200 and r.get("ok") is True and agent_ok and fields_ok and sug_gone and arch_ok and list_ok
+        ev = "http=%s ok=%s agentPrompt=%s fields=%s 假建议已删=%s 旧建议已归档=%s /api/ai-history=%s" % (
+            st, r.get("ok"), agent_ok, fields_ok, sug_gone, arch_ok, list_ok)
         if not allok:
             ev += " | " + SERVER_NOTE
         add("API", "/api/ai-request 行为", "PASS" if allok else "FAIL", ev)
@@ -700,6 +709,7 @@ var CASES = {
     var req = await iw().fetch("/data/ai-request.json").then(function (r) { return r.json(); });
     var okReq = req && req.agentPrompt && ("for" in req) && ("mode" in req);
     log("ai-request/file", okReq, "/data/ai-request.json 含 agentPrompt/for/mode");
+    log("ai-request/history-ui", !!idoc().getElementById("ai-history"), "#ai-history 历史区容器存在");
     rb.click();
     await wwait(function () { return rb.textContent.indexOf("发起 AI 优化") !== -1; }, 5000, "取消后文案复位");
     log("ai-request/cancel", true, "再点取消，文案回到「发起 AI 优化」");
@@ -1082,6 +1092,18 @@ def cleanup_verify_docs():
                 p.unlink()
             except Exception:
                 pass
+    hist = DATA / "ai-history"   # 本次运行新产生的建议归档不残留；用户自己的归档不动
+    if hist.is_dir():
+        for p in hist.glob("*.json"):
+            if p.name not in HIST_KEEP:
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+    bdir = DATA / ".backup"      # verify 文档的自动备份一并清掉（目录名含 verify-）
+    if bdir.is_dir():
+        for d in bdir.glob("*verify*"):
+            shutil.rmtree(d, ignore_errors=True)
 
 
 def report():
@@ -1106,6 +1128,9 @@ def main():
         sec_static()
 
         server_ok = ensure_server()
+        hd = DATA / "ai-history"
+        if hd.is_dir():
+            HIST_KEEP.update(p.name for p in hd.glob("*.json"))
         rb, sb = backup(REQ_FILE), backup(SUG_FILE)
         try:
             sec_api(server_ok)

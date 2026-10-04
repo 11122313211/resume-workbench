@@ -14,6 +14,7 @@ API：
     POST /api/export {name}         渲染并打印 A4 PDF
     POST /api/ai-request {name, jd} 写入 AI 请求文件（含给 agent 的完整指令 agentPrompt 与输出协议）
     GET  /api/ai-suggestion         读 AI 建议文件
+    GET  /api/ai-history            历史建议归档列表（data/ai-history/，最近 20 份）
     POST /api/upload-photo?ext=.jpg 上传照片到 data/（编辑器文件对话框配套，字节体）
 """
 
@@ -128,6 +129,19 @@ class Handler(SimpleHTTPRequestHandler):
                     return self._json({"ok": True, "items": []})
                 return self._json(json.loads(p.read_text(encoding="utf-8")))
 
+            if parsed.path == "/api/ai-history":
+                hist_dir = DATA / "ai-history"
+                items = []
+                if hist_dir.is_dir():
+                    for p in sorted(hist_dir.glob("*.json"), reverse=True)[:20]:
+                        try:
+                            d = json.loads(p.read_text(encoding="utf-8"))
+                            items.append({"file": p.name, "for": d.get("for", ""),
+                                          "count": len(d.get("items") or [])})
+                        except Exception:
+                            pass
+                return self._json({"ok": True, "items": items})
+
             if parsed.path == "/":
                 self.send_response(302)
                 self.send_header("Location", "/app/index.html")
@@ -207,10 +221,17 @@ class Handler(SimpleHTTPRequestHandler):
                 name = safe_name(body["name"])
                 doc = read_doc(name)
                 mode = "job" if doc.get("kind") == "job" else "master"
-                # 新请求作废旧建议：前端不再看到上一轮结果
+                # 新请求作废旧建议，但先归档到 data/ai-history/（保留最近 20 份，上一轮建议不丢）
                 stale = DATA / "ai-suggestion.json"
                 if stale.is_file():
+                    hist_dir = DATA / "ai-history"
+                    hist_dir.mkdir(exist_ok=True)
+                    tag = re.sub(r"[^\w\-]", "_", name)
+                    shutil.copyfile(stale, hist_dir / (time.strftime("%Y%m%d-%H%M%S") + "-" + tag + ".json"))
                     stale.unlink()
+                    olds = sorted(hist_dir.glob("*.json"))
+                    for old in olds[:-20]:
+                        old.unlink()
                 # 输出协议：写进请求文件，任何全新 agent 会话照此即可干对活
                 output = {
                     "file": "data/ai-suggestion.json",

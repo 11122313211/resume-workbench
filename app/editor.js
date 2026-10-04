@@ -1121,9 +1121,44 @@ function toggleAIPanel(open) {
       aiJdFor = state.name;
     }
     loadSuggestions();
+    loadAIHistory(); // 历史建议归档列表：重新发起前的上一轮不丢，可只读回看
     updateAISteps();
     startAIPoll(); // 面板开着就轮询（本地请求零成本），agent 何时写完都能自动出现
   } else stopAIPoll();
+}
+
+function loadAIHistory() { // 历史建议：服务端在每次发起时归档旧建议（保留最近 20 份）
+  getJSON("/api/ai-history").then(function (r) {
+    var box = document.getElementById("ai-history");
+    if (!box) return;
+    var items = (r && r.items) || [];
+    if (!items.length) { box.innerHTML = ""; return; }
+    box.innerHTML = "<div class='ai-hist-title'>历史建议</div>" + items.map(function (h) {
+      return "<button class='ai-hist-row' data-hist='" + esc(h.file) + "'>" +
+        esc(h.file.replace(/\.json$/, "")) + " · " + esc((h.for || "").replace(/^jobs\//, "")) +
+        " · " + h.count + " 条</button>";
+    }).join("");
+    $("[data-hist]", box).forEach(function (b) {
+      b.addEventListener("click", function () {
+        getJSON("/data/ai-history/" + encodeURIComponent(b.getAttribute("data-hist"))).then(function (d) {
+          var arr = Array.isArray(d.items) ? d.items : [];
+          var toolbar = document.getElementById("ai-toolbar");
+          if (toolbar) toolbar.classList.add("hidden");
+          var box2 = document.getElementById("ai-cards");
+          box2.innerHTML = "<div class='ai-hist-banner'>只读回看：" + esc(d.for || "") +
+            "（历史建议不随当前文档状态应用）<button class='btn small' id='ai-hist-back'>↩ 返回当前建议</button></div>" +
+            arr.map(function (it) {
+              var tag = it.type === "rewrite" ? "改写" : it.type === "hide" ? "建议隐藏" : it.type === "show" ? "建议恢复" : "说明";
+              return "<div class='ai-card'><span class='tag'>" + tag + "</span> " +
+                (it.target ? "对象：" + esc(String(it.target)) + "<br>" : "") +
+                "<div>" + esc(it.type === "rewrite" ? (it.text || "") : (it.reason || it.text || "")).replace(/\n/g, "<br>") + "</div></div>";
+            }).join("");
+          var back = document.getElementById("ai-hist-back");
+          if (back) back.addEventListener("click", function () { loadSuggestions(); });
+        }).catch(function () { toast("历史建议读取失败"); });
+      });
+    });
+  }).catch(function () {}); // 历史列表失败不打扰：主流程的建议渲染有自己的报错
 }
 function stopAIPoll() { clearInterval(aiPollTimer); aiPollTimer = null; }
 function startAIPoll() { // 面板开启期间轮询建议文件（本地请求零成本），agent 写好后自动出现

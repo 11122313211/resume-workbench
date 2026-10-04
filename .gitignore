@@ -10,3 +10,5 @@ data/ai-request.json
 data/ai-suggestion.json
 data/.export-target.json
 data/jobs/*.pdf
+data/ai-history/
+data/.backup/
