@@ -72,11 +72,14 @@ def note(msg):
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 本地直连，不走代理
 
 
-def http_req(method, path, body=None, timeout=15):
+def http_req(method, path, body=None, timeout=15, raw=None):
     url = BASE + path
     data = None
     headers = {}
-    if body is not None:
+    if raw is not None:
+        data = raw
+        headers["Content-Type"] = "application/octet-stream"
+    elif body is not None:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
@@ -346,6 +349,8 @@ def sec_api(server_ok):
         add("API", "/api/ai-request 行为", "SKIP", "服务不可用")
         add("API", "一次性副本全生命周期", "SKIP", "服务不可用")
         add("API", "主简历禁删", "SKIP", "服务不可用")
+        add("API", "导出 E2E（A4 PDF）", "SKIP", "服务不可用")
+        add("API", "照片上传", "SKIP", "服务不可用")
         return
     add("API", "服务可用性", "PASS", SERVER_NOTE)
 
@@ -423,6 +428,59 @@ def sec_api(server_ok):
     ok = st in (400, 403) and r.get("ok") is False
     add("API", "主简历禁删", "PASS" if ok else "FAIL",
         "http=%s ok=%s error=%s" % (st, r.get("ok"), r.get("error", "")))
+
+    # e) 导出 E2E：核心交付物（A4 PDF）端到端——真实走 Edge 无头打印，约数秒
+    exp_name = "verify-ui-" + TS + "-ex"
+    exp_full = "jobs/" + exp_name
+    pdf_path = DATA / "jobs" / (exp_name + ".pdf")
+    tgt = DATA / ".export-target.json"
+    tgt_snap = backup(tgt)
+    try:
+        st, body = http_req("POST", "/api/newjob", {"name": exp_name})
+        made = st == 200 and tryjson(body).get("ok") is True
+        st2, body2 = http_req("POST", "/api/export", {"name": exp_full}, timeout=150)
+        r2 = tryjson(body2)
+        pdf_ok = pdf_path.is_file() and pdf_path.stat().st_size > 1024
+        head_ok = pdf_ok and pdf_path.read_bytes()[:5] == b"%PDF-"
+        a4_ok = False
+        if pdf_ok:
+            m = re.search(rb"MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)",
+                          pdf_path.read_bytes())
+            if m:
+                w = float(m.group(3)) - float(m.group(1))
+                h = float(m.group(4)) - float(m.group(2))
+                a4_ok = 593 <= w <= 597 and 840 <= h <= 844  # A4=595×842pt（210×297mm）
+        allok = made and st2 == 200 and r2.get("ok") is True and pdf_ok and head_ok and a4_ok
+        add("API", "导出 E2E（A4 PDF）", "PASS" if allok else "FAIL",
+            "建副本=%s http=%s ok=%s pdf存在>1KB=%s %%PDF头=%s MediaBox=A4(%s) | %s"
+            % (made, st2, r2.get("ok"), pdf_ok, head_ok, a4_ok, str(r2.get("error", ""))[:60]))
+    finally:
+        restore(tgt, tgt_snap)
+        try:
+            if pdf_path.is_file():
+                pdf_path.unlink()
+        except Exception:
+            pass
+        http_req("POST", "/api/delete", {"name": exp_full}, timeout=10)
+
+    # f) 照片上传：合法 png 落盘 + 非法扩展名被拒
+    png1x1 = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d4944415478da63f8cfc000000301010018dd8db00000000049454e44ae426082")
+    st, body = http_req("POST", "/api/upload-photo?ext=.png", raw=png1x1)
+    r = tryjson(body)
+    name = str(r.get("name", ""))
+    saved = name.startswith("photo-") and name.endswith(".png") and (DATA / name).is_file()
+    st2, body2 = http_req("POST", "/api/upload-photo?ext=.exe", raw=png1x1)
+    rejected = st2 == 400 and tryjson(body2).get("ok") is False
+    allok = st == 200 and r.get("ok") is True and saved and rejected
+    try:
+        if saved:
+            (DATA / name).unlink()
+    except Exception:
+        pass
+    add("API", "照片上传", "PASS" if allok else "FAIL",
+        "http=%s ok=%s 落盘=%s(%s) 非法扩展名被拒=%s(http=%s)" % (st, r.get("ok"), saved, name[:24], rejected, st2))
 
 
 # ---------------------------------------------------------------- 第 3 节 HEADLESS

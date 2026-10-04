@@ -64,14 +64,21 @@ python tools/verify.py
 三层断言，退出码 0 = 全绿：
 
 1. **STATIC**：serve.py 可编译、资源版本参数一致、加粗算法两边同源、数据文件可解析；
-2. **API**：列表/新建副本/保存回读/删除/主简历禁删/AI 请求写入与旧建议作废；
-3. **HEADLESS UI**（Edge `--dump-dom` + 驱动页）：新建副本全链路、加粗切换、AI 建议应用/全部应用/撤销、错文档与坏格式诚实报错、发起-等待-取消状态机。
+2. **API**：列表/新建副本/保存回读/删除/主简历禁删/AI 请求写入与旧建议作废/**导出 E2E（真实 Edge 打印 → %PDF 头 + A4 MediaBox）**/**照片上传与扩展名白名单**；
+3. **HEADLESS UI**（Edge `--dump-dom` + 驱动页）：新建副本全链路、加粗切换、AI 建议应用/全部应用/撤销、错文档与坏格式诚实报错、发起-等待-取消状态机、⋯ 菜单与隐藏压缩、保存反馈就地化。
 
 何时跑：任何 `app/` 或 `serve.py` 改动之后、提交之前。注意事项：verify 会用 `verify-tmp-*` / `verify-ui-*` 前缀的一次性副本做实验并在结束时清理，用户的 `ai-request.json` / `ai-suggestion.json` 会字节级备份还原。
 
 **提交闸门（机制强制）**：`tools/hooks/pre-commit` 经 `git config core.hooksPath tools/hooks` 启用，每次提交自动执行 `python tools/verify.py --static`（秒级，STATIC 层：可编译/版本联动/算法同源/数据可解析）——静态契约不过，提交被阻止。动态三层（API/无头 UI）仍需提交前人工全量运行。临时绕过：`git commit --no-verify`。快速验证某次改动：`python tools/verify.py --static`。
 
 ## 5. 迭代记录
+
+### R7 · 2026-10-04 · 验证清单补盲：导出 E2E 与照片上传
+
+- **提出**：完成审计发现"验证"环节自身有盲区——产品的**核心交付物（A4 PDF 导出）**与照片上传接口在验证清单里**零覆盖**。闭环的验证一环必须覆盖它承诺保护的东西。
+- **开发**：`tools/verify.py` 新增两个 API 用例：① **导出 E2E**——建一次性副本 → 真实调用 `/api/export`（Edge 无头打印数秒）→ 断言 PDF 落盘 >1KB、`%PDF-` 头、MediaBox 为 A4（595×842pt ±2，兑现 README"210×297mm"承诺）；`.export-target.json` 与导出 PDF 全程备份/清理，不触碰用户导出记录。② **照片上传**——1×1 PNG 经 raw 通道上传落盘 `data/photo-*.png`、非法扩展名（.exe）被 400 拒绝，用后清理；`http_req` 增加 raw 字节通道；服务不可达时两项标 SKIP 并给原因。
+- **验证**：`python tools/verify.py` **23 项全绿**（STATIC 4 + API 7 + HEADLESS 12）。注：本轮提交编号顺延——另一并行会话已用 R6 落地提交闸门（476af93），本记录与之互补：它管"必须跑"，本条管"跑什么"。
+- **结果**：从静态检查、API 行为到真实打印产物，验证清单首次完整覆盖产品核心交付链路；此后改动 printer/preview/print.css，A4 尺寸回归会被当场抓住。回滚：`git revert` 单提交。
 
 ### R6 · 2026-10-04 · 闭环加固：验证闸门接入提交机制
 
