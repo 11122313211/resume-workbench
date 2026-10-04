@@ -310,9 +310,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=9" in page and "editor.css?v=8" in page
+    ok = "editor.js?v=10" in page and "editor.css?v=9" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=9 与 editor.css?v=8" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=10 与 editor.css?v=9" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -659,32 +659,64 @@ var CASES = {
     log("ai-steps/step1", true, "JD 输入后 step1 有 .done");
   },
 
-  menu: async function () {   /* ⋯ 集合菜单：开 → 项齐全 → 动作执行后自动收起 → 删除走确认可取消 → Esc 关闭 */
+  menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
     await loadEditor(DOC);
-    var btn = await wwait(function () { return q(".ctl-menu"); }, 8000, "⋯ 按钮");
-    btn.click();
+    function visSec() {
+      var all = idoc().querySelectorAll("#cards .card.section");
+      for (var i = 0; i < all.length; i++) if (!all[i].classList.contains("item-off")) return all[i];
+      return null;
+    }
+    function openOnVisible() {
+      var s = visSec();
+      if (!s) throw new Error("无可见章节");
+      s.querySelector(".ctl-menu").click();
+      return wwait(function () { return q(".vui-menu"); }, 6000, "菜单弹出");
+    }
+    var sec = await wwait(visSec, 8000, "可见章节");
+    sec.querySelector(".ctl-menu").click();
     var m = await wwait(function () { return q(".vui-menu"); }, 6000, "菜单弹出");
     var n = m.querySelectorAll("button").length;
-    log("menu/open", n === 3, "菜单项 " + n + "/3");
-    var secId = q("#cards .card.section").getAttribute("data-id");
+    log("menu/open", n === 4, "菜单项 " + n + "/4（含 隐藏/恢复）");
+    var tid = m.querySelector("[data-act='show']").getAttribute("data-id");
+    m.querySelector("[data-act='show']").click();
+    await wwait(function () {
+      var el = q("#cards .card.section[data-id='" + tid + "']");
+      return el && el.classList.contains("item-off") && el.querySelector(".show-toggle.off");
+    }, 6000, "菜单隐藏生效");
+    log("menu/hide", true, "菜单「隐藏」生效：行变暗 + 琥珀眼睛");
+    q("#cards .card.section[data-id='" + tid + "']").querySelector(".show-toggle.off").click();
+    await wwait(function () {
+      var el = q("#cards .card.section[data-id='" + tid + "']");
+      return el && !el.classList.contains("item-off");
+    }, 6000, "琥珀眼睛恢复");
+    log("menu/eye-restore", true, "琥珀眼睛一键恢复显示");
+    m = await openOnVisible();
+    var sid = m.querySelector("[data-act='up']").getAttribute("data-id");
     m.querySelector("[data-act='up']").click();
     await wwait(function () { return !q(".vui-menu"); }, 6000, "动作后自动收起");
-    var okUp = q("#cards .card.section").getAttribute("data-id") === secId;
-    log("menu/act-close", okUp, "上移项可执行（首位为 no-op）且菜单收起、DOM 完整");
-    btn = q(".ctl-menu"); btn.click();
-    m = await wwait(function () { return q(".vui-menu"); }, 6000, "菜单再次弹出");
+    log("menu/act-close", q("#cards .card.section[data-id='" + sid + "']") !== null, "上移项可执行且菜单收起、DOM 完整");
+    m = await openOnVisible();
+    var did = m.querySelector("[data-act='del']").getAttribute("data-id");
     m.querySelector("[data-act='del']").click();
     var modal = await wwait(function () { return idoc().getElementById("modal"); }, 6000, "删除确认弹窗");
     log("menu/del-confirm", !!modal.querySelector("[data-m='ok']"), "破坏类确认弹窗出现");
     modal.querySelector("[data-m='no']").click();
     await wwait(function () { return !idoc().getElementById("modal"); }, 4000, "取消关闭弹窗");
     await wwait(function () { return !q(".vui-menu"); }, 4000, "菜单同步收起");
-    log("menu/cancel", true, "取消删除：内容未变");
-    q(".ctl-menu").click();
-    await wwait(function () { return q(".vui-menu"); }, 6000, "菜单第三次弹出");
+    log("menu/cancel", q("#cards .card.section[data-id='" + did + "']") !== null, "取消删除：内容未变");
+    (visSec() || q("#cards .card.section")).querySelector(".ctl-menu").click();
+    await wwait(function () { return q(".vui-menu"); }, 6000, "菜单最后一次弹出");
     idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await wwait(function () { return !q(".vui-menu"); }, 4000, "Esc 收起菜单");
     log("menu/esc", true, "Esc 关闭菜单");
+  },
+
+  "master-no-eye": async function () {  /* 主简历可见行不渲染眼睛（低频操作收进 ⋯ 菜单）；只读断言，不触发保存 */
+    await loadEditor("");
+    await wwait(function () { return q("#cards .card.section"); }, 8000, "卡片渲染");
+    var isMaster = q("#rail-docname").textContent === "主简历";
+    var n = idoc().querySelectorAll("#cards .show-toggle:not(.off)").length;
+    log("master-no-eye", isMaster && n === 0, "当前文档=" + q("#rail-docname").textContent + " 可见行眼睛 " + n + "（应为 0）");
   }
 };
 
@@ -829,7 +861,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -899,6 +931,8 @@ def sec_headless():
             write_suggestion({"for": "别的文档", "items": [
                 {"type": "rewrite", "target": "b-edu1", "text": "不应被应用", "reason": "r"}]})
         headless_case("ai-wrongdoc", prepare=prep_wrong)
+
+        headless_case("master-no-eye")  # 主简历可见行无眼睛：只读用例，无需副本
 
         def prep_bad():
             write_suggestion({"items": "oops"})

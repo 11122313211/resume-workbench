@@ -49,7 +49,7 @@ function setSaveState(txt, cls) {
   el.textContent = txt;
   el.className = "save-state" + (cls ? " " + cls : "");
   var dot = document.getElementById("rail-dot");
-  if (dot) dot.className = "rail-dot" + (cls ? " " + cls : "");
+  if (dot) dot.className = "rail-dot" + (cls && cls !== "ok" ? " " + cls : ""); // 成功即无痕：绿点永不常驻，只有忙/失败以图标徽标浮现
 }
 
 /* ---------- 撤销 / 重做（Memento 全量快照，600ms 合帧）---------- */
@@ -263,13 +263,17 @@ function ctlBtns(kind, id) { // 操作集合按钮：常驻低饱和 ⋯，点�
   return "<button class='ctl-menu' data-menu data-k='" + kind + "' data-id='" + id +
     "' title='操作：上移 / 下移 / 删除' aria-haspopup='menu' aria-expanded='false'>⋯</button>";
 }
-function showToggle(kind, id, hidden, job) { // 眼睛切换：显示中=灰描边，隐藏=琥珀实心（隐藏是需要处理的例外），不弹 toast
-  var tip = job ? "显示中。点击从本岗位版隐藏（主简历不受影响），再点恢复"
-                : "显示中。点击隐藏（预览与导出 PDF 均不显示），再点恢复";
-  if (hidden) tip = job ? "已隐藏。点击恢复显示（本岗位版）" : "已隐藏。点击恢复显示";
-  return "<button class='show-toggle" + (hidden ? " off" : "") + "' data-act='show' data-k='" + kind +
-    "' data-id='" + id + "' title='" + tip + "' aria-pressed='" + (hidden ? "false" : "true") +
-    "' aria-label='切换显示/隐藏'>" + SVG_EYE + "</button>";
+function showToggle(kind, id, hidden, job) { // 显示/隐藏切换：琥珀实心=已隐藏（例外态），不弹 toast。
+  // 放置跟随频率、模式决定常驻：岗位取舍是全产品最高频动作 → 岗位副本可见行保留一键眼睛；
+  // 主简历隐藏是低频清理 → 可见行不放按钮，走行尾 ⋯ 菜单首项（两模式的菜单里都有同一操作）。
+  if (hidden || job) {
+    var tip = hidden ? (job ? "已隐藏。点击恢复显示（本岗位版）" : "已隐藏。点击恢复显示")
+                     : "显示中。点击从本岗位版隐藏（主简历不受影响），再点恢复";
+    return "<button class='show-toggle" + (hidden ? " off" : "") + "' data-act='show' data-k='" + kind +
+      "' data-id='" + id + "' title='" + tip + "' aria-pressed='" + (hidden ? "false" : "true") +
+      "' aria-label='切换显示/隐藏'>" + SVG_EYE + "</button>";
+  }
+  return ""; // 主简历可见行：低频操作收进 ⋯ 菜单
 }
 function renderCards() {
   var doc = state.doc;
@@ -614,15 +618,19 @@ function bindEvents() {
     var btn = e.target.closest("[data-act]");
     if (!btn) return;
     var act = btn.getAttribute("data-act"), k = btn.getAttribute("data-k"), id = btn.getAttribute("data-id");
-    if (act === "show") { // 眼睛切换：即时生效 + 按压态，不弹 toast
+    if (act === "show") { // 显示切换（行内眼睛或 ⋯ 菜单首项）：即时生效 + 按压态，不弹 toast
       var f0 = findAny(id);
       if (f0) {
         f0.obj.hidden = !f0.obj.hidden;
-      btn.classList.toggle("off", f0.obj.hidden);
-      btn.setAttribute("aria-pressed", f0.obj.hidden ? "false" : "true");
-        var host = btn.closest(".card, .bullet-row");
-        if (host) host.classList.toggle("item-off", f0.obj.hidden);
-        afterChange(false, true);
+        if (btn.closest(".vui-menu")) { // 菜单发起：点击的不是行内眼睛，重建行以同步琥珀眼睛（主简历隐藏后眼睛才出现）
+          afterChange(true, true);
+        } else {
+          btn.classList.toggle("off", f0.obj.hidden);
+          btn.setAttribute("aria-pressed", f0.obj.hidden ? "false" : "true");
+          var host = btn.closest(".card, .bullet-row");
+          if (host) host.classList.toggle("item-off", f0.obj.hidden);
+          afterChange(false, true);
+        }
       }
       return;
     }
@@ -714,9 +722,16 @@ function bindEvents() {
     closeMenu();
     menuBtn = btn; btn.setAttribute("aria-expanded", "true");
     var k = btn.getAttribute("data-k"), id = btn.getAttribute("data-id");
+    var job = state.doc && state.doc.kind === "job";
+    var f0 = findAny(id), hid = !!(f0 && f0.obj.hidden);
+    var showTip = hid ? "恢复后重新进入预览与导出"
+      : job ? "本岗位版预览与导出不显示，主简历不受影响；行尾眼睛按钮同样一键切换"
+      : "预览与导出 PDF 均不显示；行尾眼睛按钮同样一键切换";
     var m = document.createElement("div");
     m.className = "vui-menu"; m.setAttribute("role", "menu");
     m.innerHTML =
+      "<button role='menuitem' data-act='show' data-k='" + k + "' data-id='" + id + "' title='" + showTip + "'>" +
+        SVG_EYE + (hid ? "恢复显示" : "隐藏") + "</button>" +
       "<button role='menuitem' data-act='up' data-k='" + k + "' data-id='" + id + "'>▲ 上移</button>" +
       "<button role='menuitem' data-act='down' data-k='" + k + "' data-id='" + id + "'>▼ 下移</button>" +
       "<button role='menuitem' class='del' data-act='del' data-k='" + k + "' data-id='" + id + "'>✕ 删除</button>";
@@ -905,7 +920,7 @@ function bindEvents() {
   railEl.addEventListener("mouseleave", function () {
     railEl.classList.add("rail-leaving");
     clearTimeout(railLeaveTO);
-    railLeaveTO = setTimeout(function () { railEl.classList.remove("rail-leaving"); }, 320);
+    railLeaveTO = setTimeout(function () { railEl.classList.remove("rail-leaving"); }, 380); // 覆盖 .15s 宽限 + .22s 收起动画
   });
   /* 图钉状态恢复 */
   try {

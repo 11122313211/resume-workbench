@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <title>简历可视化编辑工作台</title>
-<link rel="stylesheet" href="editor.css?v=8">
+<link rel="stylesheet" href="editor.css?v=9">
 </head>
 <body>
-<!-- 悬浮侧边导航：收起为图标栏，悬停/键盘聚焦展开（同「侧边菜单」demo 交互） -->
+<!-- 悬浮侧边导航：上区=身份与内容（当前文档/文档列表/新建/AI），下区=交付与元动作（导出/保存/引导/钉住/状态行）。
+     收起 64px 图标栏，悬停/键盘聚焦零延迟展开（收起留 .15s 防抖宽限） -->
 <nav id="rail" aria-label="主导航">
   <div class="rail-head" title="当前文档">
     <span class="rail-docicon" id="rail-docicon"></span>
+    <span class="rail-dot" id="rail-dot" title=""></span>
     <span class="rail-doctext"><b id="rail-docname">—</b><i id="rail-kind">加载中…</i></span>
   </div>
   <div class="rail-line"></div>
@@ -25,16 +27,16 @@
     <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="3"/><path d="M12 9V5M9.5 5h5"/><circle cx="9.5" cy="13.5" r=".9" fill="currentColor" stroke="none"/><circle cx="14.5" cy="13.5" r=".9" fill="currentColor" stroke="none"/></svg></span>
     <span class="con">AI 助手</span>
   </button>
-  <div class="rail-line"></div>
-  <div class="rail-title">动作</div>
-  <button class="rail-item" data-nav="save" title="保存（Ctrl+S）">
-    <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-6h8v6"/></svg></span>
-    <span class="con">保存</span>
-  </button>
-  <button class="rail-item" data-nav="export" title="导出 A4 PDF（Ctrl+E）">
+  <div class="rail-spacer"></div>
+  <button class="rail-item" data-nav="export" title="导出 A4 PDF（Ctrl+E）——自动先保存">
     <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4"/><path d="M5 20h14"/></svg></span>
     <span class="con">导出 PDF</span>
   </button>
+  <button class="rail-item" data-nav="save" title="立即保存（Ctrl+S；平时自动保存）">
+    <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-6h8v6"/></svg></span>
+    <span class="con">保存</span>
+  </button>
+  <div class="rail-line"></div>
   <button class="rail-item" data-nav="help" title="新手引导 / 快捷键（?）">
     <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2.9-1.2 1.8"/><path d="M12 16.6h.01"/></svg></span>
     <span class="con">引导与快捷键</span>
@@ -44,14 +46,13 @@
     <span class="con">钉住导航</span>
   </button>
   <div class="rail-foot">
-    <span class="rail-dot" id="rail-dot"></span>
     <span class="con" id="save-state" title="点击立即保存">就绪</span>
   </div>
 </nav>
 
 <main>
   <section id="left">
-    <div id="job-banner" class="banner hidden">岗位副本模式：这里的改动只影响此副本，主简历不受影响。点眼睛图标切换显示/隐藏，隐藏的条目不进预览与 PDF。</div>
+    <div id="job-banner" class="banner hidden">岗位副本模式：这里的改动只影响此副本，主简历不受影响。行尾 👁 一键切换显示/隐藏（⋯ 菜单里也有），已隐藏的行有琥珀色眼睛可恢复；隐藏的条目不进预览与 PDF。</div>
     <div id="cards"></div>
     <div id="empty-hint" class="hidden">尚未加载文档</div>
   </section>
@@ -103,6 +104,6 @@
 <div id="toast"></div>
 <input type="file" id="photo-file" accept="image/*" class="hidden">
 <script src="vendor/Sortable.min.js?v=6"></script>
-<script src="editor.js?v=9"></script>
+<script src="editor.js?v=10"></script>
 </body>
 </html>
