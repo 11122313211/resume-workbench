@@ -1023,7 +1023,22 @@ def cleanup_verify_docs():
                 pass
 
 
+def report():
+    npass = sum(1 for _, _, s, _ in RESULTS if s == "PASS")
+    nfail = sum(1 for _, _, s, _ in RESULTS if s == "FAIL")
+    nskip = sum(1 for _, _, s, _ in RESULTS if s == "SKIP")
+    print("RESULT: %d passed, %d failed, %d skipped" % (npass, nfail, nskip))
+    return 1 if nfail else 0
+
+
 def main():
+    if "--static" in sys.argv[1:]:  # 快速静态门禁（git pre-commit 钩子用）：只跑 STATIC 层，秒级返回
+        try:
+            sec_static()
+        except Exception as e:
+            add("VERIFY", "脚本自身异常", "FAIL", "%s: %s" % (type(e).__name__, e))
+        sys.exit(report())
+
     server_ok = False
     rb = sb = None
     try:
@@ -1060,11 +1075,7 @@ def main():
             except Exception:
                 pass
 
-    npass = sum(1 for _, _, s, _ in RESULTS if s == "PASS")
-    nfail = sum(1 for _, _, s, _ in RESULTS if s == "FAIL")
-    nskip = sum(1 for _, _, s, _ in RESULTS if s == "SKIP")
-    print("RESULT: %d passed, %d failed, %d skipped" % (npass, nfail, nskip))
-    sys.exit(1 if nfail else 0)
+    sys.exit(report())
 
 
 if __name__ == "__main__":

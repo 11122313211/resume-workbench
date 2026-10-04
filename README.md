@@ -91,7 +91,8 @@ python export.py jobs/某岗位
 ├── 启动/停止 .bat                  # 桌面端快速启动/停止
 ├── app/                           # 编辑器（index/editor/preview/print）
 ├── tools/printer.py               # 无头打印引擎（argv 全字面量）
-├── tools/verify.py                # 自动验证清单：python tools/verify.py（改动后、提交前必跑）
+├── tools/verify.py                # 自动验证清单：python tools/verify.py（改动后、提交前必跑；--static 为秒级静态门禁）
+├── tools/hooks/pre-commit         # 提交闸门（git config core.hooksPath tools/hooks 启用）：STATIC 不过阻止提交
 ├── PROJECT.md                     # 项目手册：铁律 / 研发闭环 / 迭代记录 / 路线图
 └── data/                          # 主简历.json + jobs/*.json + 照片 + AI 请求/建议
 ```

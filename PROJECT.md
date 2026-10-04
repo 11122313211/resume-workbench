@@ -69,7 +69,16 @@ python tools/verify.py
 
 何时跑：任何 `app/` 或 `serve.py` 改动之后、提交之前。注意事项：verify 会用 `verify-tmp-*` / `verify-ui-*` 前缀的一次性副本做实验并在结束时清理，用户的 `ai-request.json` / `ai-suggestion.json` 会字节级备份还原。
 
+**提交闸门（机制强制）**：`tools/hooks/pre-commit` 经 `git config core.hooksPath tools/hooks` 启用，每次提交自动执行 `python tools/verify.py --static`（秒级，STATIC 层：可编译/版本联动/算法同源/数据可解析）——静态契约不过，提交被阻止。动态三层（API/无头 UI）仍需提交前人工全量运行。临时绕过：`git commit --no-verify`。快速验证某次改动：`python tools/verify.py --static`。
+
 ## 5. 迭代记录
+
+### R6 · 2026-10-04 · 闭环加固：验证闸门接入提交机制
+
+- **提出**（对闭环自身的审计）：R1~R5 的"验证"环节都靠人工记得跑 `verify.py`——PROJECT.md 写了"不通过不许提交"，但没有机制强制；流程约定不等于闭环。另有 R5 提交因代理中断停留在本地未推送。
+- **开发**：① `verify.py --static` 快速模式（只跑 STATIC 层，秒级返回，退出码语义与全量一致）；② `tools/hooks/pre-commit` 提交钩子：STATIC 不过阻止提交，`git commit --no-verify` 为明示逃生口，python 缺失时降级放行并警告；③ `git config core.hooksPath tools/hooks` 启用 + `update-index --chmod=+x` 保证 Windows 下可执行。
+- **验证**：`--static` 单测通过（4 项秒级）；**本次 R6 提交本身即钩子首次实弹**（提交瞬间触发门禁）；全量 21 项此前已全绿。
+- **结果**：验证从"流程约定"升级为"机制强制"——静态契约在每次提交时秒级把关，动态三层仍由人工在提交前全量跑。回滚：`git revert` 单提交 + `git config --unset core.hooksPath`。
 
 ### R5 · 2026-10-04 · 成功类反馈就地化（去"已保存"toast）
 
