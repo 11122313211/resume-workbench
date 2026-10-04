@@ -1152,6 +1152,14 @@ function applyItem(it) { // 把一条建议写入文档模型（调用方负责 
   else if (it.type === "show") found.obj.hidden = false;
   return true;
 }
+function charDiff(a, b) { // 字符级轻量 diff：公共前后缀对齐，中段即实际改动（零依赖，条目长度足够）
+  var s = 0;
+  while (s < a.length && s < b.length && a[s] === b[s]) s++;
+  var e = 0;
+  while (e < a.length - s && e < b.length - s && a[a.length - 1 - e] === b[b.length - 1 - e]) e++;
+  return { pre: a.slice(0, s), midOld: a.slice(s, a.length - e), midNew: b.slice(s, b.length - e), post: a.slice(a.length - e) };
+}
+
 function loadSuggestions() {
   getJSON("/api/ai-suggestion").then(function (r) {
     var box = document.getElementById("ai-cards");
@@ -1200,10 +1208,22 @@ function loadSuggestions() {
       var tag = it.type === "rewrite" ? "改写" : it.type === "hide" ? "建议隐藏" : it.type === "show" ? "建议恢复" : "说明";
       var target = findAny(it.target || "");
       var body = esc(it.type === "rewrite" ? (it.text || "") : (it.reason || it.text || ""));
+      var objText = target ? (target.obj.text || target.obj.left || target.obj["标题"] || "") : "";
+      var diffHtml = "";
+      if (it.type === "rewrite" && target && typeof target.obj.text === "string") {
+        var d = charDiff(target.obj.text, it.text || ""); // 应用前先看差异：原/改两行，改动中段高亮
+        if (d.midOld || d.midNew) {
+          diffHtml = "<div class='ai-diff'>" +
+            "<div class='d-old'>原 " + esc(d.pre) + (d.midOld ? "<del>" + esc(d.midOld) + "</del>" : "") + esc(d.post) + "</div>" +
+            "<div class='d-new'>改 " + esc(d.pre) + (d.midNew ? "<ins>" + esc(d.midNew) + "</ins>" : "") + esc(d.post) + "</div>" +
+            "</div>";
+        }
+      }
       return "<div class='ai-card" + (applied ? " applied" : "") + "'>" +
         "<span class='tag'>" + tag + "</span> " +
-        (target ? "目标：" + esc((target.obj.left || target.obj["标题"] || target.obj.text || "").slice(0, 24)) + "<br>" : "") +
-        "<div>" + body.replace(/\n/g, "<br>") + "</div>" +
+        (target ? "对象：" + esc(objText.slice(0, 40)) + "<br>" : "") +
+        diffHtml +
+        (it.type !== "rewrite" ? "<div>" + body.replace(/\n/g, "<br>") + "</div>" : "") +
         (it.type !== "note" && !applied ? "<button class='btn small apply-btn' data-ai='" + i + "'>✓ 应用</button>" : applied ? "（已应用）" : "") +
         "</div>";
     }).join("");

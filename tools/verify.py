@@ -313,9 +313,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=12" in page and "editor.css?v=10" in page
+    ok = "editor.js?v=13" in page and "editor.css?v=11" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=12 与 editor.css?v=10" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=13 与 editor.css?v=11" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -619,6 +619,9 @@ var CASES = {
     await openPanel();
     await wwait(function () { return q("#ai-cards .ai-card"); }, 8000, ".ai-card 渲染");
     var btn = await wwait(function () { return q('.apply-btn[data-ai="0"]'); }, 4000, ".apply-btn[0]");
+    var dold = q("#ai-cards .ai-diff .d-old"), dnew = q("#ai-cards .ai-diff .d-new");
+    var diffOk = !!(dold && dnew && dold.textContent.length > 4 && dnew.textContent.indexOf("【验证】改写后的成果文本") !== -1);
+    log("ai-apply/diff", diffOk, "改写卡渲染 原文/改写 对照（原行 " + (dold ? dold.textContent.length : 0) + " 字）");
     btn.click();
     await wwait(function () {
       var t = taOf(TARGET);

@@ -185,6 +185,12 @@ body.splitting { cursor: col-resize; user-select: none; }
 .ai-row { display: flex; gap: 8px; margin: 8px 0; }
 .ai-card { border: 1px solid #dbe1e8; border-radius: 9px; padding: 8px 10px; margin-top: 8px; font-size: 12.5px; }
 .ai-card .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 9px; background: #e8f0fe; color: #2456c8; margin-bottom: 4px; }
+.ai-diff { margin: 6px 0 4px; font-size: 11.5px; line-height: 1.55; } /* 改写建议的原文/改写对照，应用前看差异 */
+.ai-diff .d-old, .ai-diff .d-new { white-space: pre-wrap; word-break: break-all; }
+.ai-diff .d-old { color: #8a93a1; }
+.ai-diff .d-new { color: #374151; }
+.ai-diff del { color: #b3424a; text-decoration: line-through; background: #fdeeee; border-radius: 2px; padding: 0 1px; }
+.ai-diff ins { color: #176b33; text-decoration: none; background: #e6f4ea; border-radius: 2px; padding: 0 1px; }
 .ai-card.applied { opacity: .55; }
 .ai-card .apply-btn { margin-top: 6px; }
 .ai-empty { color: #889; font-size: 12.5px; text-align: center; padding: 18px 0; }
