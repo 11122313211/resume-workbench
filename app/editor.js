@@ -224,6 +224,53 @@ function refreshRailMeta() { // 保存/导出后轻刷新侧栏状态点（只�
     renderRail();
   }).catch(function () {});
 }
+/* ---------- 交付体检（R26）：导出前的高置信问题清单，宁缺勿滥 ---------- */
+function lintDoc(doc) {
+  var pats = [/待补充/, /待完善/, /TODO/i, /某公司/, /某某/, /XX公司/, /XX项目/, /XX科技/, /2026-?XX/, /占位/];
+  var issues = [];
+  function hit(text, where) {
+    if (!text) return;
+    var s = String(text);
+    for (var i = 0; i < pats.length; i++) {
+      if (pats[i].test(s)) { issues.push(where + "疑似占位内容「" + s.slice(0, 24) + "」"); return; }
+    }
+  }
+  var m = doc.meta || {};
+  ["姓名", "电话", "邮箱", "城市", "求职意向"].forEach(function (k) { hit(m[k], "基本信息·" + k + "："); });
+  if (!String(m.电话 || "").trim() && !String(m.邮箱 || "").trim()) issues.push("基本信息缺联系方式（电话/邮箱都为空）");
+  (doc.sections || []).forEach(function (s) {
+    if (s.hidden) return;
+    hit(s.标题, "章节标题：");
+    (s.entries || []).forEach(function (en) {
+      if (en.hidden) return;
+      ["left", "right", "meta", "tags"].forEach(function (k) { hit(en[k], "「" + (s.标题 || "") + "」条目："); });
+      (en.bullets || []).forEach(function (b) {
+        if (b.hidden) return;
+        hit(b.text, "「" + (s.标题 || "") + "」正文：");
+        if (!String(b.text || "").trim()) issues.push("「" + (s.标题 || "") + "」有空内容行（可填写或隐藏）");
+      });
+    });
+  });
+  return issues;
+}
+function showLintModal(issues, onExport) { // 体检清单 → 用户拍板：取消导出 / 仍要导出（不阻断，只提示）
+  closeModal();
+  var ov = document.createElement("div");
+  ov.className = "modal-ov"; ov.id = "modal";
+  ov.innerHTML = "<div class='modal'><div class='m-title'>🩺 交付体检：发现 " + issues.length + " 项问题</div>" +
+    "<div class='lint-list'>" + issues.slice(0, 8).map(function (s) {
+      return "<div class='lint-item'>" + esc(s) + "</div>";
+    }).join("") +
+    (issues.length > 8 ? "<div class='lint-item'>… 共 " + issues.length + " 项</div>" : "") + "</div>" +
+    "<div class='m-row'><button class='btn' data-m='no'>取消导出</button>" +
+    "<button class='btn primary' data-m='ok'>仍要导出</button></div></div>";
+  document.body.appendChild(ov);
+  ov.addEventListener("click", function (e) {
+    var a = e.target.getAttribute && e.target.getAttribute("data-m");
+    if (e.target === ov || a === "no") ov.remove();
+    else if (a === "ok") { ov.remove(); onExport(); }
+  });
+}
 /* ---------- 取舍模式（键盘流 triage：t 进入 · j/k 移动 · h 隐藏/恢复 · Esc/t 退出） ---------- */
 var triageIds = [];    // 可导航行 id（DOM 序，含已隐藏压缩行，h 可恢复）
 var triageIdx = -1;    // -1 = 未进入
@@ -994,11 +1041,16 @@ function bindEvents() {
         else toast("导出失败：" + (r.error || "未知错误"));
       }).catch(function (e) { if (navBtn) navBtn.disabled = false; setSaveState("就绪"); toast("导出失败：" + e.message); });
     }
-    if (state.doc && state.doc.kind === "job" && state.gauge && state.gauge.pages > 1) {
-      askConfirm("岗位版超过一页", "当前约 " + state.gauge.pages + " 页，导出会逐级收紧排版硬塞进一页，可能偏密——建议先取舍内容。仍要导出吗？", go);
-      return;
+    function proceed() { // 超页兜底确认（体检之后）
+      if (state.doc && state.doc.kind === "job" && state.gauge && state.gauge.pages > 1) {
+        askConfirm("岗位版超过一页", "当前约 " + state.gauge.pages + " 页，导出会逐级收紧排版硬塞进一页，可能偏密——建议先取舍内容。仍要导出吗？", go);
+        return;
+      }
+      go();
     }
-    go();
+    var issues = state.doc ? lintDoc(state.doc) : [];
+    if (issues.length) showLintModal(issues, proceed); // 交付体检：有问题先过目，用户拍板
+    else proceed();
   }
   function createJob(name) { // 真正创建：当前文档先落盘，避免竞态
     flushSave();

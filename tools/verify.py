@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=27" in page and "editor.css?v=24" in page
+    ok = "editor.js?v=28" in page and "editor.css?v=25" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=27 与 editor.css?v=24" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=28 与 editor.css?v=25" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -370,10 +370,10 @@ def sec_static():
 
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
-               "refreshRailMeta", "openBackups", "T 取舍模式（j/k 移动"]
+               "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "T 取舍模式（j/k 移动"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
-        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
+        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
 
 
 # ---------------------------------------------------------------- 第 2 节 API
@@ -1089,6 +1089,17 @@ var CASES = {
     log("expmark2/amber", true, "改动保存后 → 琥珀点（导出后有改动）");
   },
 
+  "lint": async function () {  /* 交付体检：占位内容副本 → 导出弹出体检清单 → 取消导出不落地 */
+    await loadEditor(DOC);
+    clickEl("[data-nav='export']");
+    await wwait(function () { return q("#modal .lint-item"); }, 10000, "体检清单出现");
+    var title = q("#modal .m-title").textContent;
+    log("lint/list", title.indexOf("交付体检") !== -1, title);
+    clickEl("#modal [data-m='no']");
+    await wwait(function () { return !q("#modal"); }, 6000, "取消后弹窗关闭");
+    log("lint/cancel", true, "取消导出：未触发打印、清单可关");
+  },
+
   "backup": async function () {  /* 备份恢复 UI：🕘 打开列表 → 行存在 → 恢复需确认（破坏类契约）→ 确认后执行 */
     await loadEditor(DOC);
     var bk = await wwait(function () {
@@ -1363,7 +1374,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "backup", "rename"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "backup", "rename"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1372,7 +1383,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "backup", "rename"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "backup", "rename"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1540,6 +1551,19 @@ def sec_headless():
             headless_case("expmark2", prepare=prep_x2, doc=full_x2)
         except Exception as e:
             add("HEADLESS", "expmark2", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_li, _ids_li = make_copy("-li")
+
+            def prep_li():
+                make_copy("-li")  # 每次尝试重建：往首个可见 bullet 注入占位文本，保证体检必命中
+                nm = "jobs/verify-ui-" + TS + "-li"
+                stl, dl = get_doc(nm)
+                dl["sections"][0]["entries"][0]["bullets"][0]["text"] = "XX公司占位待补充"
+                http_req("POST", "/api/save", {"name": nm, "doc": dl})
+            headless_case("lint", prepare=prep_li, doc=full_li)
+        except Exception as e:
+            add("HEADLESS", "lint", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_bkui, _ids_bkui = make_copy("-bkui")  # make_copy 已存一次盘留底一份；再改一次凑出可见备份列表

@@ -83,6 +83,9 @@ body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
 .bk-row:last-child { border-bottom: 0; }
 .bk-ts { color: #444c57; font-variant-numeric: tabular-nums; }
 .bk-empty { font-size: 13px; color: #6b7280; margin: 6px 0 12px; }
+.lint-list { max-height: 42vh; overflow: auto; background: #fff8ef; border: 1px solid #f2ddb8;
+             border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+.lint-item { font-size: 12.5px; color: #7a5a1e; padding: 3px 0; line-height: 1.5; }
 .rail-exp { position: absolute; left: 31px; top: 8px; width: 7px; height: 7px; border-radius: 50%;
             z-index: 2; cursor: help; }
 .rail-exp.ok { background: #1a9c63; box-shadow: 0 0 0 2px rgba(26,156,99,.15); }
