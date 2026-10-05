@@ -414,6 +414,7 @@ var SVG_DOC = svgI("<path d='M7 3h7l4 4v14H7z'/><path d='M14 3v4h4'/>");
 var SVG_TARGET = svgI("<circle cx='12' cy='12' r='8'/><circle cx='12' cy='12' r='3.5'/>");
 var SVG_X = svgI("<path d='M6 6l12 12M18 6L6 18'/>");
 var SVG_REN = svgI("<path d='M4 20h4L19 9l-4-4L4 16v4z'/>");
+var SVG_BK = svgI("<circle cx='12' cy='12' r='8'/><path d='M12 8v4l3 2'/>");
 var SVG_EYE = svgI("<path d='M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z'/><circle cx='12' cy='12' r='3'/>");
 var SVG_FOLDER = svgI("<path d='M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/>");
 var SVG_PIN = svgI("<path d='M12 16v6'/><path d='M8.5 3h7l-1 7 3.5 3.5H6L9.5 10z'/>");
@@ -440,6 +441,8 @@ function renderRail() { // 文档列表平铺在侧栏「文档」组，当前�
          exp +
          (job ? "<button class='rail-ren' data-nav='rendoc' data-doc=\"" + esc(n) +
                "\" title='重命名此岗位副本' aria-label='重命名 " + esc(n) + "'>" + SVG_REN + "</button>" : "") +
+         "<button class='rail-bk' data-nav='bkdoc' data-doc=\"" + esc(n) +
+         "\" title='历史备份与恢复' aria-label='历史备份 " + esc(n) + "'>" + SVG_BK + "</button>" +
          (job ? "<button class='rail-del' data-nav='deldoc' data-doc=\"" + esc(n) +
                "\" title='删除此岗位副本（主简历不受影响）' aria-label='删除 " + esc(n) + "'>" + SVG_X + "</button>" : "") +
          "</div>";
@@ -1052,12 +1055,55 @@ function bindEvents() {
       });
     }).catch(function (e) { toast("改名失败：" + e.message); });
   }
+  function openBackups(name) { // 历史备份与恢复（R25）：恢复=破坏类操作 → 确认 + 可撤销（撤销=把恢复前的内容存回去）
+    flushSave(); // 恢复覆盖的是磁盘内容：先把未落盘的修改写掉，避免恢复后又被补写回
+    var shortName = name.replace(/^jobs\//, "");
+    getJSON("/api/backups?name=" + encodeURIComponent(name)).then(function (r) {
+      var items = (r && r.items) || [];
+      closeModal();
+      var ov = document.createElement("div");
+      ov.className = "modal-ov"; ov.id = "modal";
+      ov.innerHTML = "<div class='modal'><div class='m-title'>🕘 历史备份 · " + esc(shortName) + "</div>" +
+        (items.length
+          ? "<div class='bk-tip'>每次覆盖保存前的旧版本自动留底（最近 " + items.length + " 份）。恢复前当前内容会先自动备份，恢复后可撤销。</div><div class='bk-list'>" +
+            items.map(function (it) {
+              return "<div class='bk-row'><span class='bk-ts'>" + esc(it.ts) + "</span>" +
+                     "<button class='btn small' data-bk=\"" + esc(it.file) + "\">恢复此版本</button></div>";
+            }).join("") + "</div>"
+          : "<div class='bk-empty'>还没有备份。这份文档每次「覆盖保存」前的旧版本会自动留底（每份文档保留最近 10 份）。</div>") +
+        "<div class='m-row'><button class='btn' data-m='no'>关闭</button></div></div>";
+      document.body.appendChild(ov);
+      ov.addEventListener("click", function (e) {
+        if (e.target === ov || (e.target.getAttribute && e.target.getAttribute("data-m") === "no")) { ov.remove(); return; }
+        var btn = e.target.closest && e.target.closest("[data-bk]");
+        if (!btn) return;
+        var file = btn.getAttribute("data-bk");
+        var prevDoc = state.name === name ? JSON.parse(JSON.stringify(state.doc)) : null; // 撤销快照
+        askConfirm("恢复到 " + file.slice(0, 15) + "？", "将把「" + shortName + "」覆盖为此备份版本；当前内容会先自动留底，恢复后可撤销。", function () {
+          postJSON("/api/restore", { name: name, file: file }).then(function (rr) {
+            if (!rr.ok) { toast("恢复失败：" + (rr.error || "")); return; }
+            ov.remove();
+            var after = state.name === name ? switchDoc(name) : Promise.resolve(); // 正在看这份文档：就地重载
+            return Promise.resolve(after).then(function () {
+              refreshRailMeta();
+              toast("已恢复到 " + file.slice(0, 15), 8000, prevDoc ? { label: "撤销", fn: function () {
+                postJSON("/api/save", { name: name, doc: prevDoc }).then(function () {
+                  if (state.name === name) return switchDoc(name);
+                }).then(function () { refreshRailMeta(); toast("已撤销恢复"); });
+              } } : null);
+            });
+          }).catch(function (e2) { toast("恢复失败：" + e2.message); });
+        });
+      });
+    }).catch(function () { toast("备份列表读取失败"); });
+  }
   document.getElementById("rail").addEventListener("click", function (e) {
     var b = e.target.closest("[data-nav]");
     if (!b || b.disabled) return;
     var nav = b.getAttribute("data-nav");
     if (nav === "doc") switchDoc(b.getAttribute("data-doc"));
     else if (nav === "rendoc") renameFlow(b.getAttribute("data-doc"));
+    else if (nav === "bkdoc") openBackups(b.getAttribute("data-doc"));
     else if (nav === "deldoc") {
       var dn = b.getAttribute("data-doc");
       askConfirm("删除岗位副本「" + dn.replace(/^jobs\//, "") + "」？", "将删除该副本及其已导出的 PDF，主简历不受影响，且不可恢复（建议导出留档后再删）。", function () { deleteJob(dn); });

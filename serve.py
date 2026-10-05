@@ -17,6 +17,8 @@ API：
     POST /api/ai-request {name, jd} 写入 AI 请求文件（含给 agent 的完整指令 agentPrompt 与输出协议）
     GET  /api/ai-suggestion         读 AI 建议文件
     GET  /api/ai-history            历史建议归档列表（data/ai-history/，最近 20 份）
+    GET  /api/backups?name=文档      该文档的自动备份列表（倒序，恢复选择用）
+    POST /api/restore {name, file}  用备份覆盖文档（当前内容先自动留底，可再恢复回来）
     POST /api/upload-photo?ext=.jpg 上传照片到 data/（编辑器文件对话框配套，字节体）
 """
 
@@ -178,6 +180,18 @@ class Handler(SimpleHTTPRequestHandler):
                             pass
                 return self._json({"ok": True, "items": items})
 
+            if parsed.path == "/api/backups":
+                # 历史备份列表（R25）：write_doc 每次覆盖保存前留底，这里倒序供恢复选择
+                name = safe_name(parse_qs(parsed.query).get("name", [""])[0])
+                bdir = DATA / ".backup" / name.replace("/", "_")
+                items = []
+                if bdir.is_dir():
+                    for p in sorted(bdir.glob("*.json"), reverse=True):
+                        m = re.match(r"^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})", p.stem)
+                        ts = "%s-%s-%s %s:%s:%s" % m.groups() if m else p.stem
+                        items.append({"file": p.name, "ts": ts})
+                return self._json({"ok": True, "items": items})
+
             if parsed.path == "/":
                 self.send_response(302)
                 self.send_header("Location", "/app/index.html")
@@ -260,6 +274,26 @@ class Handler(SimpleHTTPRequestHandler):
                 if old_pdf.is_file():
                     old_pdf.replace(JOBS / (to.split("/", 1)[1] + ".pdf"))
                 return self._json({"ok": True, "name": to})
+
+            if parsed.path == "/api/restore":
+                # 用自动备份覆盖文档（R25）：文件名白名单校验防目录穿越；当前内容经 write_doc 先自动留底
+                name = safe_name(str(body.get("name", "")))
+                fn = str(body.get("file", ""))
+                if not re.match(r"^\d{8}-\d{6}-\d{3}\.json$", fn):
+                    return self._json({"ok": False, "error": "备份文件名不合法"}, 400)
+                bdir = DATA / ".backup" / name.replace("/", "_")
+                bp = bdir / fn
+                if not bp.is_file():
+                    return self._json({"ok": False, "error": "备份不存在"}, 404)
+                try:
+                    doc = json.loads(bp.read_text(encoding="utf-8"))
+                except Exception:
+                    return self._json({"ok": False, "error": "备份内容不是有效 JSON"}, 400)
+                if not isinstance(doc, dict):
+                    return self._json({"ok": False, "error": "备份内容格式异常"}, 400)
+                doc["name"] = name
+                write_doc(name, doc)
+                return self._json({"ok": True})
 
             if parsed.path == "/api/newjob":
                 raw = str(body.get("name", "")).strip().strip("/")

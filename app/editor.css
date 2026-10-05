@@ -69,6 +69,20 @@ body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
 .rail-del svg { width: 13px; height: 13px; display: block; }
 #rail:hover .rail-row:hover .rail-del, #rail:focus-within .rail-row:hover .rail-del, #rail.pinned .rail-row:hover .rail-del { opacity: 1; }
 .rail-del:hover { background: #fdeaea; color: #a12626; }
+.rail-bk { position: absolute; right: 56px; top: 50%; transform: translateY(-50%);
+           border: 0; background: transparent; color: #aab2bd; cursor: pointer;
+           width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+           padding: 0; opacity: 0; transition: opacity .12s ease, background .15s, color .15s; }
+.rail-bk svg { width: 13px; height: 13px; display: block; }
+#rail:hover .rail-row:hover .rail-bk, #rail:focus-within .rail-row:hover .rail-bk, #rail.pinned .rail-row:hover .rail-bk { opacity: 1; }
+.rail-bk:hover { background: #eaf1fd; color: #2f6fed; }
+.bk-tip { font-size: 12px; color: #6b7280; margin: 2px 0 10px; }
+.bk-list { max-height: 46vh; overflow: auto; border: 1px solid #e3e7ee; border-radius: 8px; margin-bottom: 12px; }
+.bk-row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+          padding: 7px 12px; border-bottom: 1px solid #eef1f5; font-size: 13px; }
+.bk-row:last-child { border-bottom: 0; }
+.bk-ts { color: #444c57; font-variant-numeric: tabular-nums; }
+.bk-empty { font-size: 13px; color: #6b7280; margin: 6px 0 12px; }
 .rail-exp { position: absolute; left: 31px; top: 8px; width: 7px; height: 7px; border-radius: 50%;
             z-index: 2; cursor: help; }
 .rail-exp.ok { background: #1a9c63; box-shadow: 0 0 0 2px rgba(26,156,99,.15); }

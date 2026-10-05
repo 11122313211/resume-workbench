@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=26" in page and "editor.css?v=23" in page
+    ok = "editor.js?v=27" in page and "editor.css?v=24" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=26 与 editor.css?v=23" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=27 与 editor.css?v=24" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -370,10 +370,10 @@ def sec_static():
 
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
-               "refreshRailMeta", "T 取舍模式（j/k 移动"]
+               "refreshRailMeta", "openBackups", "T 取舍模式（j/k 移动"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
-        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
+        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
 
 
 # ---------------------------------------------------------------- 第 2 节 API
@@ -490,6 +490,30 @@ def sec_api(server_ok):
     rn_ok = rn1 and st2 == 200 and st3 == 404 and st4 == 400
     add("API", "副本重命名", "PASS" if rn_ok else "FAIL",
         "rename=%s 新可读=%s 旧404=%s 主简历禁改=%s(http=%s)" % (rn1, st2 == 200, st3 == 404, st4 == 400, st4))
+
+    # c3) 备份与恢复：两次保存留两份底 → 列表倒序 → 恢复旧版内容回得来 → 坏文件名拒绝
+    full_bk = "jobs/verify-tmp-bk-" + TS
+    try:
+        http_req("POST", "/api/newjob", {"name": "verify-tmp-bk-" + TS})
+        st, doc = get_doc(full_bk)
+        b0 = doc["sections"][0]["entries"][0]["bullets"][0]["text"]
+        http_req("POST", "/api/save", {"name": full_bk, "doc": doc})          # 留底 v0（原文）
+        doc["sections"][0]["entries"][0]["bullets"][0]["text"] = "【verify】备份后修改A"
+        http_req("POST", "/api/save", {"name": full_bk, "doc": doc})          # 留底 v0'，文件=v1
+        st, bl = http_req("GET", "/api/backups?name=" + urllib.parse.quote(full_bk), timeout=10)
+        items = tryjson(bl).get("items") or []
+        lst_ok = st == 200 and len(items) >= 2 and items[0]["ts"] >= items[-1]["ts"]
+        st, rl = http_req("POST", "/api/restore", {"name": full_bk, "file": items[-1]["file"]})
+        rr1 = st == 200 and tryjson(rl).get("ok") is True
+        st, doc2 = get_doc(full_bk)
+        back = doc2["sections"][0]["entries"][0]["bullets"][0]["text"] == b0
+        st, _rl2 = http_req("POST", "/api/restore", {"name": full_bk, "file": "../escape.json"})
+        guard = st == 400
+        bk_ok = lst_ok and rr1 and back and guard
+        add("API", "备份恢复", "PASS" if bk_ok else "FAIL",
+            "列表≥2倒序=%s 恢复=%s 内容还原=%s 目录穿越拒绝=%s(http=%s)" % (lst_ok, rr1, back, guard, st))
+    except Exception as e:
+        add("API", "备份恢复", "FAIL", "异常: %s" % e)
 
     # d) 主简历禁删
     st, body = http_req("POST", "/api/delete", {"name": "主简历"})
@@ -1028,29 +1052,61 @@ var CASES = {
     log("aibadge/clear", true, "打开面板即视为查看，徽标熄灭");
   },
 
-  "expmark": async function () {  /* 导出状态可见性：初始无状态点 → 真点导出按钮 → 绿点出现 → 改动后转琥珀（均限本副本行） */
+  "expmark": async function () {  /* 导出状态可见性（绿）：初始无状态点 → 真点导出按钮 → 绿点出现（客户端 refreshRailMeta 链路） */
     await loadEditor(DOC);
-    function rowDot(cls) {
+    function rowDotA(cls) {
       var b = q("#rail button[data-nav='doc'][data-doc='" + DOC + "']");
       var row = b && b.closest(".rail-row");
       return row ? row.querySelector(".rail-exp" + (cls ? "." + cls : "")) : null;
     }
     await wwait(function () { return q("#rail button[data-nav='doc'][data-doc='" + DOC + "']"); }, 8000, "侧栏渲染");
-    if (rowDot()) throw new Error("导出前不应有状态点");
+    if (rowDotA()) throw new Error("导出前不应有状态点");
     log("expmark/fresh", true, "新副本无导出状态点（其他文档的点不受干扰）");
     clickEl("[data-nav='export']");
     await wwait(function () {  /* 岗位超页会先弹确认：两条路都接受 */
-      if (rowDot("ok")) return rowDot("ok");
+      if (rowDotA("ok")) return rowDotA("ok");
       var m = idoc().getElementById("modal");
       if (m) { var ok = m.querySelector("[data-m='ok']"); if (ok) ok.click(); }
       return null;
     }, 40000, "导出后绿点出现");
     log("expmark/green", true, "导出成功 → 侧栏绿点（已导出最新）");
+  },
+
+  "expmark2": async function () {  /* 导出状态可见性（琥珀）：prepare 已真实导出 → 初始绿点 → 改动保存 → 琥珀点 */
+    await loadEditor(DOC);
+    function rowDotB(cls) {
+      var b = q("#rail button[data-nav='doc'][data-doc='" + DOC + "']");
+      var row = b && b.closest(".rail-row");
+      return row ? row.querySelector(".rail-exp" + (cls ? "." + cls : "")) : null;
+    }
+    await wwait(function () { return rowDotB("ok"); }, 15000, "初始绿点存在");
+    log("expmark2/green", true, "prepare 已导出 → 初始绿点");
     var ta = await wwait(function () { return q("#cards textarea[data-id]"); }, 8000, "首个文本框");
     ta.value = "【验证】导出后改动文本XYZ";
     ta.dispatchEvent(new Event("input", { bubbles: true }));
-    await wwait(function () { return rowDot("stale"); }, 20000, "保存后琥珀点出现");
-    log("expmark/amber", true, "改动保存后 → 琥珀点（导出后有改动）");
+    clickEl("[data-nav='save']"); // 立即落盘（跳过 900ms 防抖，降低虚拟时间消耗）
+    await wwait(function () { return rowDotB("stale"); }, 30000, "保存后琥珀点出现");
+    log("expmark2/amber", true, "改动保存后 → 琥珀点（导出后有改动）");
+  },
+
+  "backup": async function () {  /* 备份恢复 UI：🕘 打开列表 → 行存在 → 恢复需确认（破坏类契约）→ 确认后执行 */
+    await loadEditor(DOC);
+    var bk = await wwait(function () {
+      return q("#rail button[data-nav='bkdoc'][data-doc='" + DOC + "']");
+    }, 8000, "🕘 备份按钮存在");
+    bk.click();
+    await wwait(function () { return q("#modal .bk-row"); }, 6000, "备份列表有行");
+    var rows = idoc().querySelectorAll("#modal .bk-row").length;
+    log("backup/list", rows >= 1, "备份行数=" + rows);
+    q("#modal [data-bk]").click();
+    await wwait(function () {
+      var t = q("#modal .m-title");
+      return t && t.textContent.indexOf("恢复") !== -1;
+    }, 6000, "确认弹窗出现");
+    log("backup/confirm", true, "恢复需二次确认（破坏类=confirm+可撤销）");
+    clickEl("#modal [data-m='ok']");
+    await wwait(function () { return idoc().body.textContent.indexOf("已恢复到") !== -1; }, 8000, "恢复完成 toast");
+    log("backup/done", true, "恢复执行完成，toast 提示可撤销");
   },
 
   "rename": async function () {   /* 副本重命名：✎ → 弹窗输入新名 → 侧栏出现新名 */
@@ -1174,7 +1230,7 @@ def find_edge():
 def run_edge_once(edge, url):
     profile = tempfile.mkdtemp(prefix="verify-edge-")
     cmd = [edge, "--headless=new", "--disable-gpu", "--dump-dom",
-           "--virtual-time-budget=40000", "--window-size=1400,1000",
+           "--virtual-time-budget=90000", "--window-size=1400,1000",
            "--no-first-run", "--no-default-browser-check",
            "--user-data-dir=" + profile, url]
     html, timed_out = "", False
@@ -1206,9 +1262,12 @@ def fail_beats(logtxt):
 
 
 def pass_evidence(logtxt):
-    beats = [re.sub(r"^beat:\s*", "", l.strip()) for l in logtxt.splitlines()
-             if l.strip().startswith("beat:") and " PASS" in l]
-    return "; ".join(beats)
+    return "; ".join(pass_beats(logtxt))
+
+
+def pass_beats(logtxt):
+    return [re.sub(r"^beat:\s*", "", l.strip()) for l in logtxt.splitlines()
+            if l.strip().startswith("beat:") and " PASS" in l]
 
 
 def bullet_ids(doc):
@@ -1284,6 +1343,7 @@ def headless_case(case, prepare=None, doc="", target="", target2=""):
         evs.append("Edge 进程超时被杀")
     if not done:
         evs.append("驱动页未到 DONE（可能 JS 崩溃/虚拟时间未结束）")
+    evs.extend(pass_beats(logtxt)[-4:])  # 失败也要带上已走过的步子：定位卡在哪一步
     fb = fail_beats(logtxt)
     evs.extend(fb[:3])
     if not logtxt:
@@ -1303,7 +1363,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "rename"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "backup", "rename"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1312,7 +1372,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "rename"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "backup", "rename"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1462,9 +1522,30 @@ def sec_headless():
 
         try:
             full_xp, _ids_xp = make_copy("-xp")
-            headless_case("expmark", doc=full_xp)
+
+            def prep_xp():
+                make_copy("-xp")  # 重跑防脏：第 1 次尝试导出会盖 exportedAt，重建副本让 fresh 前置在重试时仍成立
+            headless_case("expmark", prepare=prep_xp, doc=full_xp)
         except Exception as e:
             add("HEADLESS", "expmark", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_x2, _ids_x2 = make_copy("-x2")
+
+            def prep_x2():
+                make_copy("-x2")  # 每次尝试重建副本并真实导出一次：服务端盖 exportedAt，初始即绿点
+                stx, _bx = http_req("POST", "/api/export", {"name": "jobs/verify-ui-" + TS + "-x2"}, timeout=150)
+                if stx != 200:
+                    raise RuntimeError("prepare 导出失败 http=%s" % stx)
+            headless_case("expmark2", prepare=prep_x2, doc=full_x2)
+        except Exception as e:
+            add("HEADLESS", "expmark2", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_bkui, _ids_bkui = make_copy("-bkui")  # make_copy 已存一次盘留底一份；再改一次凑出可见备份列表
+            headless_case("backup", doc=full_bkui)
+        except Exception as e:
+            add("HEADLESS", "backup", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_bg, _ids_bg = make_copy("-bg")
