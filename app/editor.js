@@ -349,6 +349,21 @@ function normalizeIds() {
   return changed;
 }
 
+/* ---------- 时间列格式助手：宽松校验（2024 / 2024.06 / 2024-06 / A~B / A-至今…），非法 amber 提示，不阻断不改数据 ---------- */
+function timeFmtOk(v) {
+  v = (v || "").trim();
+  if (!v) return true;
+  var p = "(\\d{4}([.\\-]\\d{1,2})?|至今|现在|now)";
+  return new RegExp("^" + p + "\\s*(~|—|–|-|至)\\s*" + p + "$|^" + p + "$", "i").test(v);
+}
+function updateTimeFmt() {
+  $$("input[data-k='entry'][data-f='right']").forEach(function (i) {
+    var ok = timeFmtOk(i.value);
+    i.classList.toggle("time-warn", !ok);
+    i.title = ok ? "" : "建议格式：2024.06 ~ 至今（或 2024-06、2024.06 - 2025.03）；仅提示，不阻断输入";
+  });
+}
+
 function switchDoc(name) {
   flushSave(); // 先把上一个文档挂起的编辑落盘，避免 900ms 窗口内切档串写
   triageExit(); // 取舍模式不跨文档：高亮与 HUD 是旧文档 DOM 的引用
@@ -513,6 +528,7 @@ function updateChars() {
   var hc = document.getElementById("hidden-chip");
   if (hc) { hc.textContent = "已隐藏 " + hid; hc.classList.toggle("hidden", hid === 0); } // 0 时无痕
   updateJdMarks();
+  updateTimeFmt();
 }
 
 /* ---------- 拖拽排序（SortableJS 三层嵌套；无库时退回原生 DnD）---------- */
@@ -752,7 +768,8 @@ function afterChange(structural, force) {
   schedulePreview();
   baseline = snap();
   updateChars();
-  updateJdMarks(); // 手打文本/结构变化实时刷新 JD 命中徽标
+  updateJdMarks();
+  updateTimeFmt(); // 手打时间实时校验提示
 }
 
 /* ---------- 事件绑定 ---------- */

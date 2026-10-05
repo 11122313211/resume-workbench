@@ -314,9 +314,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=20" in page and "editor.css?v=17" in page
+    ok = "editor.js?v=21" in page and "editor.css?v=18" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=20 与 editor.css?v=17" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=21 与 editor.css?v=18" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -911,6 +911,25 @@ var CASES = {
     log("paste-img/done", true, "粘贴图片自动上传并落到照片字段");
   },
 
+  "timefmt": async function () {   /* 时间列格式助手：非法格式 amber 提示，合法格式无痕 */
+    await loadEditor(DOC);
+    var inp = await wwait(function () { return q("input[data-f='right']"); }, 8000, "时间输入框");
+    inp.value = "abc";
+    inp.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () {
+      var i = q("input[data-f='right']");
+      return i && i.classList.contains("time-warn");
+    }, 4000, "非法格式标 amber");
+    log("timefmt/warn", true, "非法格式出现提示样式");
+    inp.value = "2024.06 ~ 至今";
+    inp.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () {
+      var i = q("input[data-f='right']");
+      return i && !i.classList.contains("time-warn");
+    }, 4000, "合法格式无痕");
+    log("timefmt/ok", true, "合法格式无提示无痕");
+  },
+
   menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
     await loadEditor(DOC);
     function visSec() {
@@ -1147,7 +1166,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1156,7 +1175,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1279,6 +1298,12 @@ def sec_headless():
             headless_case("paste-img", doc=full_pi)
         except Exception as e:
             add("HEADLESS", "paste-img", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_tf, _ids_tf = make_copy("-tf")
+            headless_case("timefmt", doc=full_tf)
+        except Exception as e:
+            add("HEADLESS", "timefmt", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

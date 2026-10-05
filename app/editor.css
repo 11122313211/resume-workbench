@@ -289,3 +289,6 @@ body.splitting { cursor: col-resize; user-select: none; }
 /* ===== AI 建议卡片序号（键盘 1-9 快速应用提示） ===== */
 .ai-num { display: inline-block; margin-left: 6px; font-size: 10.5px; line-height: 1; color: #556;
   background: #eef1f5; border-radius: 999px; padding: 3px 7px; vertical-align: 1px; }
+
+/* ===== 时间列格式助手（非法格式 amber 提示） ===== */
+.time-warn { border-color: #d97706 !important; background: #fffbf2 !important; }
