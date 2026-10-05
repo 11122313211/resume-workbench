@@ -281,3 +281,7 @@ body.splitting { cursor: col-resize; user-select: none; }
 /* ===== 撤销/重做按钮（可发现性：态随撤销栈） ===== */
 .rail-item:disabled { opacity: .35; cursor: default; }
 .rail-item:disabled:hover { background: transparent; }
+
+/* ===== JD 相关性标记（取舍辅助） ===== */
+.jd-hit { flex: none; font-size: 10.5px; line-height: 1; color: #b45309; background: #fdf3e3;
+  border: 1px solid #f3ddb5; border-radius: 999px; padding: 3px 7px; }

@@ -314,9 +314,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=16" in page and "editor.css?v=14" in page
+    ok = "editor.js?v=17" in page and "editor.css?v=15" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=16 与 editor.css?v=14" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=17 与 editor.css?v=15" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -809,6 +809,30 @@ var CASES = {
     log("undobtn/redo", true, "↷ 重做恢复改动");
   },
 
+  "jdm": async function () {   /* JD 相关性标记：贴 JD → 含关键词行出 ★徽标，无匹配行无痕 */
+    await loadEditor(DOC);
+    await openPanel();
+    var jd = await wwait(function () { return idoc().getElementById("ai-jd"); }, 6000, "#ai-jd");
+    jd.value = "岗位要求：精通 Python 与 Django，熟悉 MySQL 调优，有高性能后端经验";
+    jd.dispatchEvent(new Event("input", { bubbles: true }));
+    var ta = await wwait(function () { return q("#cards .bullet-row textarea"); }, 8000, "首个 bullet textarea");
+    ta.value = "无匹配词占位内容";
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () {
+      var row = q("#cards .bullet-row");
+      return row && !row.querySelector(".jd-hit");
+    }, 6000, "无匹配行无徽标");
+    log("jdm/nomatch", true, "无匹配内容无 ★徽标");
+    ta.value = "精通 Python，做过 Django 项目";
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () {
+      var row = q("#cards .bullet-row");
+      var el = row && row.querySelector(".jd-hit");
+      return el && el.textContent.indexOf("★") === 0;
+    }, 6000, "命中行出现 ★徽标");
+    log("jdm/hit", true, "含 JD 关键词的行打了 ★徽标（Python/Django）");
+  },
+
   menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
     await loadEditor(DOC);
     function visSec() {
@@ -1045,7 +1069,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1054,7 +1078,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1135,6 +1159,12 @@ def sec_headless():
             headless_case("undobtn", doc=full_u)
         except Exception as e:
             add("HEADLESS", "undobtn", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_j, _ids_j = make_copy("-j")
+            headless_case("jdm", doc=full_j)
+        except Exception as e:
+            add("HEADLESS", "jdm", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

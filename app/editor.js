@@ -235,7 +235,9 @@ function triageHud() {
     hud.setAttribute("aria-live", "polite");
     document.body.appendChild(hud);
   }
-  hud.textContent = "取舍模式 " + (triageIdx + 1) + "/" + triageIds.length + " · j/k 移动 · h 隐藏/恢复 · Esc 退出";
+  var hitEl = el && el.querySelector(".jd-hit");
+  hud.textContent = "取舍模式 " + (triageIdx + 1) + "/" + triageIds.length +
+    (hitEl ? " · " + hitEl.textContent : "") + " · j/k 移动 · h 隐藏/恢复 · Esc 退出";
 }
 function triagePaint() {
   $$("#cards .triage-cur").forEach(function (el) { el.classList.remove("triage-cur"); });
@@ -279,6 +281,48 @@ function triageToggle() { // 与行内眼睛同一语义：主简历可见行没
   triageCollect();         // 重渲染后行数可能变化（压缩不改行数，防御性重收集）
   if (triageIdx >= triageIds.length) triageIdx = triageIds.length - 1;
   triagePaint();
+}
+
+/* ---------- JD 相关性标记（取舍辅助：用 AI 面板里的 JD 提取高频词，行尾 ★命中数；无 JD 无痕） ---------- */
+var JD_STOP = "的了和与及或在是对于有为把你我不他们这个那些等请需具备优先熟练熟悉能够负责参与相关工作经验岗位要求任职我们以上以及进行通过".split("");
+var jdKwsCache = { jd: null, kws: [] };
+function extractKws(jd) { // 零依赖启发式：英文词出现即计，中文取相邻二字组合且需出现 ≥2 次（标记是提示不是结论）
+  var freq = {};
+  (jd.match(/[A-Za-z][A-Za-z0-9+#./-]{1,19}/g) || []).forEach(function (w) {
+    w = w.toLowerCase();
+    freq[w] = (freq[w] || 0) + 2;
+  });
+  (jd.match(/[\u4e00-\u9fff]{2,}/g) || []).forEach(function (seg) {
+    for (var i = 0; i + 1 < seg.length; i++) {
+      var bi = seg.charAt(i) + seg.charAt(i + 1);
+      if (JD_STOP.indexOf(bi.charAt(0)) >= 0 || JD_STOP.indexOf(bi.charAt(1)) >= 0) continue;
+      freq[bi] = (freq[bi] || 0) + 1;
+    }
+  });
+  return Object.keys(freq).filter(function (k) { return freq[k] >= 2; })
+    .sort(function (a, b) { return freq[b] - freq[a]; }).slice(0, 30);
+}
+function updateJdMarks() {
+  $$("#cards .jd-hit").forEach(function (el) { el.remove(); });
+  var jd = (document.getElementById("ai-jd").value || "").trim();
+  if (jdKwsCache.jd !== jd) jdKwsCache.jd = jd, jdKwsCache.kws = jd ? extractKws(jd) : [];
+  if (!jdKwsCache.kws.length) return;
+  var low = jdKwsCache.kws.map(function (k) { return k.toLowerCase(); });
+  $$("#cards .card.section, #cards .card.entry, #cards .bullet-row").forEach(function (row) {
+    var text = $$("input", row).map(function (i) { return i.value; }).join(" ");
+    var ta2 = row.querySelector("textarea");
+    if (ta2) text += " " + ta2.value;
+    text = text.toLowerCase();
+    var hits = 0;
+    low.forEach(function (k) { if (text.indexOf(k) !== -1) hits++; });
+    if (!hits) return;
+    var s = document.createElement("span");
+    s.className = "jd-hit";
+    s.textContent = "★" + hits;
+    s.title = "与 JD 命中 " + hits + " 个关键词（取舍时优先保留）";
+    var head = row.querySelector(".card-head");
+    (head || row).appendChild(s);
+  });
 }
 
 function switchDoc(name) {
@@ -443,6 +487,7 @@ function updateChars() {
   if (chip) chip.textContent = "成果字数 " + n;
   var hc = document.getElementById("hidden-chip");
   if (hc) { hc.textContent = "已隐藏 " + hid; hc.classList.toggle("hidden", hid === 0); } // 0 时无痕
+  updateJdMarks();
 }
 
 /* ---------- 拖拽排序（SortableJS 三层嵌套；无库时退回原生 DnD）---------- */
@@ -682,6 +727,7 @@ function afterChange(structural, force) {
   schedulePreview();
   baseline = snap();
   updateChars();
+  updateJdMarks(); // 手打文本/结构变化实时刷新 JD 命中徽标
 }
 
 /* ---------- 事件绑定 ---------- */
@@ -1075,7 +1121,7 @@ function bindEvents() {
 
   /* AI 抽屉：三步闭环（贴 JD → 发起即复制 → agent 运行后建议自动出现）+ 全部应用（开关走侧栏/Ctrl+J） */
   document.getElementById("ai-close").addEventListener("click", function () { toggleAIPanel(false); });
-  document.getElementById("ai-jd").addEventListener("input", function () { aiJdFor = state.name; updateAISteps(); });
+  document.getElementById("ai-jd").addEventListener("input", function () { aiJdFor = state.name; updateAISteps(); updateJdMarks(); });
   document.getElementById("ai-request").addEventListener("click", function () {
     var btn = this;
     if (aiWaiting) { // 等待中再点 = 取消等待；提示词已在缓存，仍可点「复制提示词」手动复制
@@ -1208,6 +1254,7 @@ function toggleAIPanel(open) {
     loadSuggestions();
     loadAIHistory(); // 历史建议归档列表：重新发起前的上一轮不丢，可只读回看
     updateAISteps();
+    updateJdMarks(); // JD 随文档恢复后立即刷新命中徽标
     startAIPoll(); // 面板开着就轮询（本地请求零成本），agent 何时写完都能自动出现
   } else stopAIPoll();
 }
