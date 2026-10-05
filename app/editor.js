@@ -406,6 +406,7 @@ function svgI(paths) {
 var SVG_DOC = svgI("<path d='M7 3h7l4 4v14H7z'/><path d='M14 3v4h4'/>");
 var SVG_TARGET = svgI("<circle cx='12' cy='12' r='8'/><circle cx='12' cy='12' r='3.5'/>");
 var SVG_X = svgI("<path d='M6 6l12 12M18 6L6 18'/>");
+var SVG_REN = svgI("<path d='M4 20h4L19 9l-4-4L4 16v4z'/>");
 var SVG_EYE = svgI("<path d='M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z'/><circle cx='12' cy='12' r='3'/>");
 var SVG_FOLDER = svgI("<path d='M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/>");
 var SVG_PIN = svgI("<path d='M12 16v6'/><path d='M8.5 3h7l-1 7 3.5 3.5H6L9.5 10z'/>");
@@ -421,6 +422,8 @@ function renderRail() { // 文档列表平铺在侧栏「文档」组，当前�
          "\" title=\"" + esc(n) + "\"" + (active ? " aria-current='true'" : "") + ">" +
          "<span class='ric'>" + (job ? SVG_TARGET : SVG_DOC) + "</span>" +
          "<span class='con'>" + esc(job ? n.replace(/^jobs\//, "") : "主简历") + "</span></button>" +
+         (job ? "<button class='rail-ren' data-nav='rendoc' data-doc=\"" + esc(n) +
+               "\" title='重命名此岗位副本' aria-label='重命名 " + esc(n) + "'>" + SVG_REN + "</button>" : "") +
          (job ? "<button class='rail-del' data-nav='deldoc' data-doc=\"" + esc(n) +
                "\" title='删除此岗位副本（主简历不受影响）' aria-label='删除 " + esc(n) + "'>" + SVG_X + "</button>" : "") +
          "</div>";
@@ -1012,11 +1015,33 @@ function bindEvents() {
       });
     }).catch(function (e) { toast("删除失败：" + e.message); });
   }
+  function renameFlow(name) {
+    askText("重命名岗位副本", "新名称（建议：日期_公司_岗位）", name.replace(/^jobs\//, ""), "如：2026-10-03_某公司_前端开发", function (nv) {
+      if (!nv) { toast("名称不能为空"); return; }
+      var to = nv.indexOf("jobs/") === 0 ? nv : "jobs/" + nv;
+      if (to === name) return;
+      if (state.list.indexOf(to) !== -1) { toast("同名副本已存在，换个名称"); return; }
+      renameJob(name, to);
+    });
+  }
+  function renameJob(from, to) { // JSON 与 PDF 一起改名；当前文档被改名则跟随切换；可撤销（撤销=改回去）
+    flushSave();
+    var wasActive = state.name === from;
+    postJSON("/api/rename", { from: from, to: to }).then(function (r) {
+      if (!r.ok) { toast("改名失败：" + (r.error || "")); return; }
+      return loadList().then(function () {
+        if (wasActive) return switchDoc(to);
+      }).then(function () {
+        toast("已重命名为「" + to.replace(/^jobs\//, "") + "」", 8000, { label: "撤销", fn: function () { renameJob(to, from); } });
+      });
+    }).catch(function (e) { toast("改名失败：" + e.message); });
+  }
   document.getElementById("rail").addEventListener("click", function (e) {
     var b = e.target.closest("[data-nav]");
     if (!b || b.disabled) return;
     var nav = b.getAttribute("data-nav");
     if (nav === "doc") switchDoc(b.getAttribute("data-doc"));
+    else if (nav === "rendoc") renameFlow(b.getAttribute("data-doc"));
     else if (nav === "deldoc") {
       var dn = b.getAttribute("data-doc");
       askConfirm("删除岗位副本「" + dn.replace(/^jobs\//, "") + "」？", "将删除该副本及其已导出的 PDF，主简历不受影响，且不可恢复（建议导出留档后再删）。", function () { deleteJob(dn); });

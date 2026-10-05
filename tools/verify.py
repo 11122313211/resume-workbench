@@ -15,6 +15,7 @@
 data/ai-suggestion.json 字节级备份后恢复；不改 app/、serve.py、tools/printer.py。
 """
 
+import hashlib
 import json
 import os
 import re
@@ -254,7 +255,14 @@ def start_inprocess():
 def ensure_server():
     global SERVER_NOTE
     if port_open():
-        SERVER_NOTE = "8618 已有服务，复用（若为旧进程，ai-request 新行为可能未生效）"
+        # 过期探测（R22 教训）：外部进程可能跑着旧版 serve.py，新端点会 404
+        st, body = http_req("GET", "/api/ping", timeout=5)
+        rev = hashlib.sha256((ROOT / "serve.py").read_bytes()).hexdigest()[:10]
+        r = tryjson(body)
+        if st != 200 or r.get("rev") != rev:
+            SERVER_NOTE = "8618 外部服务为旧版本（/api/ping rev 不匹配，新端点用例可能失败）→ 请重启服务后重跑"
+        else:
+            SERVER_NOTE = "8618 已有服务，复用（版本指纹一致）"
         return True
     SERVER_NOTE = "in-process serve.start_server() 启动"
     ok = start_inprocess()
@@ -314,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=23" in page and "editor.css?v=20" in page
+    ok = "editor.js?v=24" in page and "editor.css?v=21" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=23 与 editor.css?v=20" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=24 与 editor.css?v=21" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -361,10 +369,10 @@ def sec_static():
         "全部文档 id 无缺失无重复" if not idbad else "异常文档: " + ",".join(idbad))
 
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
-               "updateTimeFmt", "railFilter", "T 取舍模式（j/k 移动"]
+               "updateTimeFmt", "railFilter", "renameFlow", "T 取舍模式（j/k 移动"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
-        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
+        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
 
 
 # ---------------------------------------------------------------- 第 2 节 API
@@ -379,6 +387,7 @@ def sec_api(server_ok):
         add("API", "/api/list", "SKIP", "服务不可用")
         add("API", "/api/ai-request 行为", "SKIP", "服务不可用")
         add("API", "一次性副本全生命周期", "SKIP", "服务不可用")
+        add("API", "副本重命名", "SKIP", "服务不可用")
         add("API", "主简历禁删", "SKIP", "服务不可用")
         add("API", "导出 E2E（A4 PDF）", "SKIP", "服务不可用")
         add("API", "照片上传", "SKIP", "服务不可用")
@@ -466,6 +475,20 @@ def sec_api(server_ok):
     allok &= s6
     ev.append("再读404=%s(http=%s)" % (s6, st))
     add("API", "一次性副本全生命周期", "PASS" if allok else "FAIL", " ".join(ev))
+
+    # c2) 副本重命名：JSON 跟走（新可读/旧 404/主简历禁改）
+    name_a = "verify-tmp-rename-" + TS
+    full_a = "jobs/" + name_a
+    http_req("POST", "/api/newjob", {"name": name_a})
+    st, body = http_req("POST", "/api/rename", {"from": full_a, "to": "jobs/verify-tmp-renamed-" + TS})
+    r = tryjson(body)
+    rn1 = st == 200 and r.get("ok") is True
+    st2, _ = get_doc("jobs/verify-tmp-renamed-" + TS)
+    st3, _ = get_doc(full_a)
+    st4, _b4 = http_req("POST", "/api/rename", {"from": "主简历", "to": "jobs/verify-tmp-nope"})
+    rn_ok = rn1 and st2 == 200 and st3 == 404 and st4 == 400
+    add("API", "副本重命名", "PASS" if rn_ok else "FAIL",
+        "rename=%s 新可读=%s 旧404=%s 主简历禁改=%s(http=%s)" % (rn1, st2 == 200, st3 == 404, st4 == 400, st4))
 
     # d) 主简历禁删
     st, body = http_req("POST", "/api/delete", {"name": "主简历"})
@@ -979,6 +1002,20 @@ var CASES = {
     log("chipjump/done", true, "chip 点击进入取舍模式并定位到隐藏行");
   },
 
+  "rename": async function () {   /* 副本重命名：✎ → 弹窗输入新名 → 侧栏出现新名 */
+    await loadEditor(DOC);
+    await wwait(function () {
+      return idoc().querySelector('#rail button[data-nav="rendoc"][data-doc="' + DOC + '"]');
+    }, 8000, "✎ 改名按钮存在");
+    idoc().querySelector('#rail button[data-nav="rendoc"][data-doc="' + DOC + '"]').click();
+    var inp = await wwait(function () { return idoc().getElementById("m-input"); }, 4000, "改名弹窗");
+    inp.value = "verify-ui-" + QS.get("ts") + "-rn2";
+    var ok = idoc().querySelector("#modal [data-m='ok']") || idoc().querySelector("#modal button");
+    ok.click();
+    await wwait(function () { return railShows("jobs/verify-ui-" + QS.get("ts") + "-rn2"); }, 8000, "侧栏出现新名");
+    log("rename/done", true, "重命名后侧栏出现新名");
+  },
+
   menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
     await loadEditor(DOC);
     function visSec() {
@@ -1215,7 +1252,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "rename"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1224,7 +1261,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "rename"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1365,6 +1402,12 @@ def sec_headless():
             headless_case("chipjump", doc=full_cj)
         except Exception as e:
             add("HEADLESS", "chipjump", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_rn, _ids_rn = make_copy("-rn")
+            headless_case("rename", doc=full_rn)
+        except Exception as e:
+            add("HEADLESS", "rename", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

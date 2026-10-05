@@ -6,10 +6,12 @@
 → 自动打开浏览器 http://127.0.0.1:8618/ 进入可视化编辑器。
 
 API：
+    GET  /api/ping                  存活探测 + serve.py 版本指纹（verify 识别过期进程用）
     GET  /api/list                  文档列表
     GET  /api/doc?name=主简历        读文档
     POST /api/save {name, doc}      保存文档（覆盖前旧版本自动留底 data/.backup/，每文档保留 10 份）
     POST /api/delete {name}         删除岗位副本（主简历不可删，连带清理同名 PDF）
+    POST /api/rename {from,to}      岗位副本改名（主简历不可改，目标重名拒绝；PDF 跟随改名）
     POST /api/newjob {name}         复制主简历创建岗位副本
     POST /api/export {name}         渲染并打印 A4 PDF
     POST /api/ai-request {name, jd} 写入 AI 请求文件（含给 agent 的完整指令 agentPrompt 与输出协议）
@@ -18,6 +20,7 @@ API：
     POST /api/upload-photo?ext=.jpg 上传照片到 data/（编辑器文件对话框配套，字节体）
 """
 
+import hashlib
 import json
 import re
 import shutil
@@ -127,6 +130,11 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         try:
+            if parsed.path == "/api/ping":
+                # 版本指纹：verify 复用外部服务前用它识别「旧进程跑旧代码」（R22 教训）
+                rev = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:10]
+                return self._json({"ok": True, "rev": rev})
+
             if parsed.path == "/api/list":
                 docs = ["主简历"] + sorted(
                     "jobs/" + p.stem for p in JOBS.glob("*.json") if not p.name.startswith(".")
@@ -208,6 +216,29 @@ class Handler(SimpleHTTPRequestHandler):
                 if pdf.is_file():
                     pdf.unlink()
                 return self._json({"ok": True})
+
+            if parsed.path == "/api/rename":
+                # 岗位副本改名：JSON 与同名 PDF 一起跟走；主简历不可改名，目标名已存在则拒绝。
+                frm = safe_name(str(body.get("from", "")))
+                raw = str(body.get("to", "")).strip().strip("/")
+                to = safe_name(raw if raw.startswith("jobs/") else "jobs/" + raw)
+                if frm == "主简历" or to == "主简历" or not frm.startswith("jobs/") or not to.startswith("jobs/"):
+                    return self._json({"ok": False, "error": "仅岗位副本可以改名"}, 400)
+                if frm == to:
+                    return self._json({"ok": True, "name": to})
+                src, dst = doc_path(frm), doc_path(to)
+                if not src.is_file():
+                    return self._json({"ok": False, "error": "文档不存在"}, 404)
+                if dst.is_file():
+                    return self._json({"ok": False, "error": "同名副本已存在"}, 400)
+                doc = read_doc(frm)
+                doc["name"] = to
+                write_doc(to, doc)
+                src.unlink()
+                old_pdf = JOBS / (frm.split("/", 1)[1] + ".pdf")
+                if old_pdf.is_file():
+                    old_pdf.replace(JOBS / (to.split("/", 1)[1] + ".pdf"))
+                return self._json({"ok": True, "name": to})
 
             if parsed.path == "/api/newjob":
                 raw = str(body.get("name", "")).strip().strip("/")
