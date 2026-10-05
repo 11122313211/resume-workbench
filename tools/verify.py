@@ -523,6 +523,29 @@ def sec_api(server_ok):
     add("API", "主简历禁删", "PASS" if ok else "FAIL",
         "http=%s ok=%s error=%s" % (st, r.get("ok"), r.get("error", "")))
 
+    # d2) 加固边界（R29）：路径穿越拒绝 / 巨型请求体拒绝 / 仅大小写不同的改名诚实拒绝
+    try:
+        st, _b = http_req("POST", "/api/save", {"name": "../evil", "doc": {"kind": "master"}})
+        t1 = st == 400
+        st, _b = http_req("GET", "/api/doc?name=" + urllib.parse.quote("../evil"), timeout=10)
+        t2 = st == 400
+        st, _b = http_req("POST", "/api/newjob", {"name": "verify-tmp-cs-" + TS})
+        nm_cs = "jobs/verify-tmp-cs-" + TS
+        # 大写化同名（casefold 相等）→ 应 400 拒绝
+        st, _b = http_req("POST", "/api/rename", {"from": nm_cs, "to": nm_cs.upper()})
+        t3 = st == 400
+        st, _b = get_doc(nm_cs)  # 原文档必须毫发无损
+        t4 = st == 200
+        big = {"name": "jobs/verify-tmp-big-" + TS, "doc": {"kind": "job", "pad": "x" * (21 * 1024 * 1024)}}
+        st, _b = http_req("POST", "/api/save", big, timeout=30)
+        t5 = st == 400
+        allok = t1 and t2 and t3 and t4 and t5
+        add("API", "加固边界", "PASS" if allok else "FAIL",
+            "穿越拒绝=%s(读%s写%s) 大小写改名拒绝=%s 原档无损=%s 巨型体拒绝=%s(http=%s)"
+            % (t1, t2, t1, t3, t4, t5, st))
+    except Exception as e:
+        add("API", "加固边界", "FAIL", "异常: %s" % e)
+
     # e) 导出 E2E：核心交付物（A4 PDF）端到端——真实走 Edge 无头打印，约数秒
     exp_name = "verify-ui-" + TS + "-ex"
     exp_full = "jobs/" + exp_name

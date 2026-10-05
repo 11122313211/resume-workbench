@@ -127,6 +127,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _body(self):
         n = int(self.headers.get("Content-Length") or 0)
+        if n > 20 * 1024 * 1024:  # 文档 JSON 体积的上限防护：异常客户端不允许吃满内存
+            while n > 0:  # 丢弃已声明的请求体，保证 400 响应能被客户端完整收到
+                chunk = self.rfile.read(min(n, 65536))
+                if not chunk:
+                    break
+                n -= len(chunk)
+            raise ValueError("请求体过大（>20MB）")
         return json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
 
     # ---------- GET ----------
@@ -261,6 +268,9 @@ class Handler(SimpleHTTPRequestHandler):
                     return self._json({"ok": False, "error": "仅岗位副本可以改名"}, 400)
                 if frm == to:
                     return self._json({"ok": True, "name": to})
+                if frm.casefold() == to.casefold():
+                    # Windows 文件系统不区分大小写：写新读旧会静默丢数据，宁可诚实拒绝
+                    return self._json({"ok": False, "error": "仅大小写不同的名称在本系统不可用"}, 400)
                 src, dst = doc_path(frm), doc_path(to)
                 if not src.is_file():
                     return self._json({"ok": False, "error": "文档不存在"}, 404)
