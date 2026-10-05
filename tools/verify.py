@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=29" in page and "editor.css?v=26" in page
+    ok = "editor.js?v=30" in page and "editor.css?v=26" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=29 与 editor.css?v=26" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=30 与 editor.css?v=26" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -370,7 +370,8 @@ def sec_static():
 
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
-               "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "showPhotoZoom", "T 取舍模式（j/k 移动"]
+               "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "showPhotoZoom",
+               "cycleDoc", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
         "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
@@ -1089,6 +1090,18 @@ var CASES = {
     log("expmark2/amber", true, "改动保存后 → 琥珀点（导出后有改动）");
   },
 
+  "altswitch": async function () {  /* Alt+↓/↑ 循环切换文档：侧栏当前项与头部文档名联动 */
+    await loadEditor(DOC);
+    await wwait(function () { return q("#rail-docname") && q("#rail-docname").textContent.length > 0; }, 8000, "头部文档名渲染");
+    var before = q("#rail-docname").textContent;
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true, cancelable: true }));
+    await wwait(function () { return q("#rail-docname").textContent !== before; }, 8000, "Alt+↓ 切到下一个文档");
+    log("altswitch/down", true, before + " → " + q("#rail-docname").textContent);
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true, cancelable: true }));
+    await wwait(function () { return q("#rail-docname").textContent === before; }, 8000, "Alt+↑ 切回原文档");
+    log("altswitch/up", true, "Alt+↑ 回到 " + before);
+  },
+
   "photozoom": async function () {  /* 预览照片点击 → 放大弹层 → 点击关闭（查看类，无按钮） */
     await loadEditor(DOC);
     var ph = await wwait(function () {
@@ -1387,7 +1400,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "backup", "rename"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1396,7 +1409,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "backup", "rename"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1564,6 +1577,12 @@ def sec_headless():
             headless_case("expmark2", prepare=prep_x2, doc=full_x2)
         except Exception as e:
             add("HEADLESS", "expmark2", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_as, _ids_as = make_copy("-as")
+            headless_case("altswitch", doc=full_as)
+        except Exception as e:
+            add("HEADLESS", "altswitch", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_ph, _ids_ph = make_copy("-ph")

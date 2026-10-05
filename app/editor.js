@@ -160,7 +160,7 @@ function showOnboard(force) {
     "<li><b>维护主简历</b>：左侧卡片增删改、拖拽排序，右侧 A4 实时预览，完整版可以是 2 页</li>" +
     "<li><b>投递取舍</b>：AI 助手里贴 JD、点「发起 AI 优化」（提示词自动复制）→ 到你的 AI agent 粘贴运行 → 回来建议自动出现，一键或逐条采纳</li>" +
     "<li><b>一键导出</b>：左侧导航「导出 PDF」得到与预览 1:1 的 A4 打印版</li>" +
-    "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· T 取舍模式（j/k 移动 · h 隐藏/恢复 · Esc 退出）· 点右侧预览可定位左侧卡片 · AI 建议就绪时左侧 🤖 亮圆点，面板关着也不会错过 · ? 重看本引导</p>" +
+    "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· T 取舍模式（j/k 移动 · h 隐藏/恢复 · Esc 退出）· Alt+↑/↓ 切换文档 · 点右侧预览可定位左侧卡片 · AI 建议就绪时左侧 🤖 亮圆点，面板关着也不会错过 · ? 重看本引导</p>" +
     "<div class='m-row'><button class='btn primary' data-m='ok'>开始使用</button></div></div>";
   document.body.appendChild(ov);
   ov.addEventListener("click", function (e) {
@@ -426,6 +426,15 @@ function updateTimeFmt() {
   });
 }
 
+function cycleDoc(dir) { // Alt+↑/↓ 循环切换文档（R28）：主简历与副本同列，切完 toast 报名
+  var list = state.list || [];
+  if (!list.length) return;
+  var i = list.indexOf(state.name);
+  var next = list[(i + dir + list.length) % list.length];
+  if (next === state.name) return;
+  switchDoc(next);
+  toast("切换到 " + (next === "主简历" ? "主简历" : next.replace(/^jobs\//, "")));
+}
 function switchDoc(name) {
   flushSave(); // 先把上一个文档挂起的编辑落盘，避免 900ms 窗口内切档串写
   triageExit(); // 取舍模式不跨文档：高亮与 HUD 是旧文档 DOM 的引用
@@ -1347,6 +1356,9 @@ function uploadPhotoBlob(blob, ext) {
       return;
     }
     var typing = e.target && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT");
+    if (!typing && !document.getElementById("modal") && e.altKey && (k === "arrowdown" || k === "arrowup")) {
+      e.preventDefault(); cycleDoc(k === "arrowdown" ? 1 : -1); return; // Alt+↑/↓：循环切换文档
+    }
     if (!typing && !document.getElementById("modal") && triageIdx >= 0) { // 取舍模式键位（输入框聚焦时让位给正常打字）
       if (k === "j" || k === "arrowdown") { e.preventDefault(); triageMove(1); return; }
       if (k === "k" || k === "arrowup") { e.preventDefault(); triageMove(-1); return; }
