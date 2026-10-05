@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=30" in page and "editor.css?v=26" in page
+    ok = "editor.js?v=31" in page and "editor.css?v=27" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=30 与 editor.css?v=26" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=31 与 editor.css?v=27" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -371,7 +371,7 @@ def sec_static():
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
                "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "showPhotoZoom",
-               "cycleDoc", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
+               "cycleDoc", "masterAt", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
         "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
@@ -545,6 +545,20 @@ def sec_api(server_ok):
             % (t1, t2, t1, t3, t4, t5, st))
     except Exception as e:
         add("API", "加固边界", "FAIL", "异常: %s" % e)
+
+    # d3) 漂移锚点（R30）：新副本 meta 带 masterAt，且不晚于主简历当前 savedAt（新建副本无假漂移）
+    try:
+        http_req("POST", "/api/newjob", {"name": "verify-tmp-dr-" + TS})
+        st, bl = http_req("GET", "/api/list", timeout=10)
+        meta = tryjson(bl).get("meta") or {}
+        mc = meta.get("jobs/verify-tmp-dr-" + TS) or {}
+        mm2 = meta.get("主简历") or {}
+        t1 = bool(mc.get("masterAt"))
+        t2 = not (mm2.get("savedAt") and mm2["savedAt"] > mc["masterAt"])
+        add("API", "漂移锚点", "PASS" if (t1 and t2) else "FAIL",
+            "masterAt=%s 新建副本无假漂移=%s" % (t1, t2))
+    except Exception as e:
+        add("API", "漂移锚点", "FAIL", "异常: %s" % e)
 
     # e) 导出 E2E：核心交付物（A4 PDF）端到端——真实走 Edge 无头打印，约数秒
     exp_name = "verify-ui-" + TS + "-ex"

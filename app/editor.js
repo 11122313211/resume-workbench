@@ -497,11 +497,14 @@ function renderRail() { // 文档列表平铺在侧栏「文档」组，当前�
             (stale ? "导出后内容有改动，PDF 还是旧版——重新导出即可" : "已导出 PDF（" + esc(m.exportedAt.replace("T", " ")) + "）") +
             "' aria-label='" + (stale ? "有改动未重新导出" : "已导出") + "'></span>";
     }
+    var mm = (state.meta || {})["主简历"] || {}; // 漂移提示（R30）：主简历在副本创建后又保存过 → 该副本行带 ↑
+    var drift = job && m.masterAt && mm.savedAt && mm.savedAt > m.masterAt;
     rows += "<div class='rail-row" + (active ? " active" : "") + "'>" +
          "<button class='rail-item" + (active ? " active" : "") + "' data-nav='doc' data-doc=\"" + esc(n) +
-         "\" title=\"" + esc(n) + "\"" + (active ? " aria-current='true'" : "") + ">" +
+         "\" title=\"" + esc(n) + (drift ? "（主简历创建后已更新，可新建副本带入最新内容）" : "") + "\"" + (active ? " aria-current='true'" : "") + ">" +
          "<span class='ric'>" + (job ? SVG_TARGET : SVG_DOC) + "</span>" +
-         "<span class='con'>" + esc(job ? n.replace(/^jobs\//, "") : "主简历") + "</span></button>" +
+         "<span class='con'>" + (drift ? "<span class='drift' title='主简历创建后已更新，可新建副本带入最新内容'>↑</span>" : "") +
+         esc(job ? n.replace(/^jobs\//, "") : "主简历") + "</span></button>" +
          exp +
          (job ? "<button class='rail-ren' data-nav='rendoc' data-doc=\"" + esc(n) +
                "\" title='重命名此岗位副本' aria-label='重命名 " + esc(n) + "'>" + SVG_REN + "</button>" : "") +

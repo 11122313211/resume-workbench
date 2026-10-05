@@ -156,8 +156,9 @@ class Handler(SimpleHTTPRequestHandler):
                         m = read_doc(n).get("meta") or {}
                     except Exception:
                         continue
-                    if m.get("exportedAt") or m.get("savedAt"):
-                        meta[n] = {"exportedAt": m.get("exportedAt"), "savedAt": m.get("savedAt")}
+                    if m.get("exportedAt") or m.get("savedAt") or m.get("masterAt"):
+                        meta[n] = {"exportedAt": m.get("exportedAt"), "savedAt": m.get("savedAt"),
+                                   "masterAt": m.get("masterAt")}
                 return self._json({"ok": True, "docs": docs, "meta": meta})
 
             if parsed.path == "/api/doc":
@@ -318,6 +319,7 @@ class Handler(SimpleHTTPRequestHandler):
                     m.pop("savedAt", None)
                     m.pop("exportedAt", None)
                 master.setdefault("meta", {})
+                master["meta"]["masterAt"] = datetime.now().isoformat(timespec="seconds")  # 漂移检测锚点：主简历此后再保存 → 该副本显示 ↑ 提示
                 write_doc(safe, master)
                 return self._json({"ok": True, "name": safe})
 
