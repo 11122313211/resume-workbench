@@ -314,9 +314,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=17" in page and "editor.css?v=15" in page
+    ok = "editor.js?v=18" in page and "editor.css?v=16" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=17 与 editor.css?v=15" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=18 与 editor.css?v=16" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -335,6 +335,30 @@ def sec_static():
             bad.append("%s(%s)" % (f.name, e))
     add("STATIC", "data JSON 可解析", "PASS" if not bad else "FAIL",
         "%d 个文件解析通过%s" % (n, ("；失败: " + "; ".join(bad[:3])) if bad else ""))
+
+    idbad = []
+    for f in files:
+        try:
+            iddoc = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        vals = []
+
+        def walk(o):
+            if isinstance(o, dict):
+                if "id" in o:
+                    vals.append(o.get("id"))
+                for v in o.values():
+                    walk(v)
+            elif isinstance(o, list):
+                for v in o:
+                    walk(v)
+
+        walk(iddoc)
+        if len(vals) != len(set(vals)) or any(not v for v in vals):
+            idbad.append(f.name)
+    add("STATIC", "数据 id 唯一且非空", "PASS" if not idbad else "FAIL",
+        "全部文档 id 无缺失无重复" if not idbad else "异常文档: " + ",".join(idbad))
 
 
 # ---------------------------------------------------------------- 第 2 节 API
@@ -833,6 +857,27 @@ var CASES = {
     log("jdm/hit", true, "含 JD 关键词的行打了 ★徽标（Python/Django）");
   },
 
+  "idfix": async function () {   /* 数据完整性守卫：重复 id 打开即修复并落盘 */
+    await loadEditor(DOC);
+    await wwait(function () {
+      return idoc().querySelectorAll("#cards .card.section").length >= 2;
+    }, 8000, "两个章节渲染");
+    var okIds = await wwait(function () {
+      return iw().fetch("/api/doc?name=" + encodeURIComponent(DOC)).then(function (r) { return r.json(); }).then(function (doc) {
+        var ids = [];
+        (doc.sections || []).forEach(function (s) {
+          ids.push(s.id);
+          (s.entries || []).forEach(function (e) {
+            ids.push(e.id);
+            (e.bullets || []).forEach(function (b) { ids.push(b.id); });
+          });
+        });
+        return ids.length >= 4 && new Set(ids).size === ids.length && ids.indexOf(null) === -1;
+      });
+    }, 9000, "落盘的 id 已唯一");
+    log("idfix/unique", true, "重复 id 打开即修复并落盘（章节内容未丢）");
+  },
+
   menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
     await loadEditor(DOC);
     function visSec() {
@@ -1069,7 +1114,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1078,7 +1123,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1165,6 +1210,24 @@ def sec_headless():
             headless_case("jdm", doc=full_j)
         except Exception as e:
             add("HEADLESS", "jdm", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_d, _ids_d = make_copy("-d")
+
+            def prep_idfix():
+                make_copy("-d")  # 重置副本
+                st, doc = get_doc(full_d)
+                if doc.get("sections") and len(doc["sections"]) > 1:
+                    try:  # 制造重复 id：第二章节首个 bullet 与第一章节首个 bullet 同 id
+                        doc["sections"][1]["entries"][0]["bullets"][0]["id"] = \
+                            doc["sections"][0]["entries"][0]["bullets"][0]["id"]
+                    except Exception:
+                        pass
+                    http_req("POST", "/api/save", {"name": full_d, "doc": doc}, timeout=10)
+
+            headless_case("idfix", prepare=prep_idfix, doc=full_d)
+        except Exception as e:
+            add("HEADLESS", "idfix", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

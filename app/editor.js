@@ -325,6 +325,30 @@ function updateJdMarks() {
   });
 }
 
+/* ---------- 数据完整性守卫：id 缺失/重复会让 ⋯菜单、隐藏、查找命中错误条目（R13 教训的防线） ---------- */
+function normalizeIds() {
+  var seen = {}, changed = false, seq = 0;
+  var tag = (state.name || "doc").replace(/^jobs\//, "").replace(/[^\w]/g, "").slice(0, 6);
+  function fix(o, pfx) { // 确定性重编号：pfx-文档标签-序号，do/while 保证不与已有 id 冲突
+    seq++;
+    if (!o.id || seen[o.id]) {
+      var nid;
+      do { seq++; nid = pfx + "-" + tag + seq; } while (seen[nid]);
+      o.id = nid;
+      changed = true;
+    }
+    seen[o.id] = true;
+  }
+  (state.doc.sections || []).forEach(function (s) {
+    fix(s, "s");
+    (s.entries || []).forEach(function (e) {
+      fix(e, "e");
+      (e.bullets || []).forEach(function (b) { fix(b, "b"); });
+    });
+  });
+  return changed;
+}
+
 function switchDoc(name) {
   flushSave(); // 先把上一个文档挂起的编辑落盘，避免 900ms 窗口内切档串写
   triageExit(); // 取舍模式不跨文档：高亮与 HUD 是旧文档 DOM 的引用
@@ -332,6 +356,7 @@ function switchDoc(name) {
   try { localStorage.setItem("vui-last", name); } catch (e) {}
   return getJSON("/api/doc?name=" + encodeURIComponent(name)).then(function (doc) {
     state.doc = doc;
+    if (normalizeIds()) scheduleSave(); // 打开即修复 id 缺失/重复并落盘
     var job = doc.kind === "job";
     document.getElementById("rail-docicon").innerHTML = job ? SVG_TARGET : SVG_DOC;
     document.getElementById("rail-docname").textContent = job ? name.replace(/^jobs\//, "") : "主简历";
