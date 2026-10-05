@@ -271,3 +271,9 @@ body.splitting { cursor: col-resize; user-select: none; }
 .modal .ob-steps { margin: 10px 0 6px; padding-left: 20px; }
 .modal .ob-steps li { font-size: 13px; color: #333; line-height: 1.7; margin-bottom: 8px; }
 .modal .ob-tip { font-size: 12px; color: #778; background: #f4f6fa; border-radius: 8px; padding: 7px 10px; }
+
+/* ===== 取舍模式（键盘流 triage） ===== */
+.triage-cur { outline: 2px solid #4a7dbd; outline-offset: 2px; border-radius: 8px; }
+#triage-hud { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  background: #24303f; color: #fff; font-size: 12.5px; padding: 8px 14px; border-radius: 999px;
+  box-shadow: 0 6px 22px rgba(0,0,0,.25); z-index: 80; white-space: nowrap; }

@@ -314,9 +314,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=14" in page and "editor.css?v=12" in page
+    ok = "editor.js?v=15" in page and "editor.css?v=13" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=14 与 editor.css?v=12" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=15 与 editor.css?v=13" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -608,6 +608,8 @@ var CASES = {
   bold: async function () {
     await loadEditor(DOC);
     var ta = await wwait(function () { return q("#cards .bullet-row textarea"); }, 8000, "首个 bullet textarea");
+    ta.value = "验证加粗文本ABCDEF";   /* 与真实数据解耦：固定无 ** 的内容（用户首条可能自带加粗标记） */
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
     var orig = ta.value;
     var btn = ta.closest(".bullet-row").querySelector(".ctl-b");
     ta.focus(); ta.setSelectionRange(0, 4);
@@ -734,6 +736,44 @@ var CASES = {
       return s1 && s1.classList.contains("done");
     }, 4000, "step1 加 .done");
     log("ai-steps/step1", true, "JD 输入后 step1 有 .done");
+  },
+
+  "triage": async function () {   /* 键盘取舍模式：t 进入 → j 移动 → h 隐藏/恢复 → Esc 退出 */
+    await loadEditor(DOC);
+    function press(key) {
+      idoc().dispatchEvent(new KeyboardEvent("keydown", { key: key, bubbles: true }));
+    }
+    await wwait(function () {
+      return idoc().querySelectorAll("#cards .bullet-row, #cards .card.entry, #cards .card.section").length >= 3;
+    }, 8000, "卡片渲染");
+    press("t");
+    await wwait(function () { return idoc().getElementById("triage-hud"); }, 4000, "HUD 出现");
+    var cur1 = await wwait(function () { return idoc().querySelector("#cards .triage-cur"); }, 4000, "当前行高亮");
+    var id1 = cur1.getAttribute("data-id");
+    log("triage/start", true, "进入取舍模式，当前行 " + id1);
+    press("j");
+    await wwait(function () {
+      var el = idoc().querySelector("#cards .triage-cur");
+      return el && el.getAttribute("data-id") !== id1;
+    }, 4000, "j 移动到下一行");
+    var id2 = idoc().querySelector("#cards .triage-cur").getAttribute("data-id");
+    log("triage/move", true, "j: " + id1 + " → " + id2);
+    press("h");
+    await wwait(function () {
+      var el = idoc().querySelector('#cards [data-id="' + id2 + '"]');
+      return el && el.classList.contains("item-off");
+    }, 8000, "h 隐藏生效（item-off）");
+    log("triage/hide", true, id2 + " 已隐藏");
+    press("h");
+    await wwait(function () {
+      var el = idoc().querySelector('#cards [data-id="' + id2 + '"]');
+      return el && !el.classList.contains("item-off");
+    }, 8000, "h 恢复显示");
+    log("triage/restore", true, id2 + " 已恢复");
+    press("Escape");
+    await wwait(function () { return !idoc().getElementById("triage-hud"); }, 4000, "Esc 退出 HUD 消失");
+    await wwait(function () { return !idoc().querySelector("#cards .triage-cur"); }, 4000, "高亮清除");
+    log("triage/exit", true, "Esc 退出取舍模式");
   },
 
   menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
@@ -890,6 +930,18 @@ def bullet_ids(doc):
     return out
 
 
+def scrub_hidden(o):
+    """递归清零 hidden：用户主简历可能自带任意隐藏条目，测试副本必须与真实数据解耦。"""
+    if isinstance(o, dict):
+        if "hidden" in o:
+            o["hidden"] = False
+        for v in o.values():
+            scrub_hidden(v)
+    elif isinstance(o, list):
+        for v in o:
+            scrub_hidden(v)
+
+
 def make_copy(suffix):
     nm = "verify-ui-" + TS + suffix
     st, body = http_req("POST", "/api/newjob", {"name": nm})
@@ -900,6 +952,10 @@ def make_copy(suffix):
     st, doc = get_doc(full)
     if st != 200:
         raise RuntimeError("读副本失败 http=%s" % st)
+    scrub_hidden(doc)
+    st2, _ = http_req("POST", "/api/save", {"name": full, "doc": doc})
+    if st2 != 200:
+        raise RuntimeError("副本 hidden 清零失败 http=%s" % st2)
     return full, bullet_ids(doc)
 
 
@@ -956,7 +1012,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -965,7 +1021,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1034,6 +1090,12 @@ def sec_headless():
             headless_case("save-feedback", doc=full_s)
         except Exception as e:
             add("HEADLESS", "save-feedback", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_t, _ids_t = make_copy("-t")
+            headless_case("triage", doc=full_t)
+        except Exception as e:
+            add("HEADLESS", "triage", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

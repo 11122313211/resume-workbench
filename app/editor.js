@@ -152,7 +152,7 @@ function showOnboard(force) {
     "<li><b>维护主简历</b>：左侧卡片增删改、拖拽排序，右侧 A4 实时预览，完整版可以是 2 页</li>" +
     "<li><b>投递取舍</b>：AI 助手里贴 JD、点「发起 AI 优化」（提示词自动复制）→ 到你的 AI agent 粘贴运行 → 回来建议自动出现，一键或逐条采纳</li>" +
     "<li><b>一键导出</b>：左侧导航「导出 PDF」得到与预览 1:1 的 A4 打印版</li>" +
-    "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· 点右侧预览可定位左侧卡片 · ? 重看本引导</p>" +
+    "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· T 取舍模式（j/k 移动 · h 隐藏/恢复 · Esc 退出）· 点右侧预览可定位左侧卡片 · ? 重看本引导</p>" +
     "<div class='m-row'><button class='btn primary' data-m='ok'>开始使用</button></div></div>";
   document.body.appendChild(ov);
   ov.addEventListener("click", function (e) {
@@ -209,8 +209,73 @@ function loadList() {
     if (!state.list.length) toast("无法连接本地服务：请双击「启动简历工作台.bat」启动后再刷新页面", 8000);
   });
 }
+/* ---------- 取舍模式（键盘流 triage：t 进入 · j/k 移动 · h 隐藏/恢复 · Esc/t 退出） ---------- */
+var triageIds = [];    // 可导航行 id（DOM 序，含已隐藏压缩行，h 可恢复）
+var triageIdx = -1;    // -1 = 未进入
+
+function triageCollect() { // 折叠章节里的行不可见（offsetParent=null）不进导航
+  triageIds = $$("#cards [data-id]").filter(function (el) {
+    return el.matches(".card.section, .card.entry, .bullet-row") && el.offsetParent !== null;
+  }).map(function (el) { return el.getAttribute("data-id"); });
+}
+function triageHud() {
+  var hud = document.getElementById("triage-hud");
+  if (!hud) {
+    hud = document.createElement("div");
+    hud.id = "triage-hud";
+    hud.setAttribute("role", "status");
+    hud.setAttribute("aria-live", "polite");
+    document.body.appendChild(hud);
+  }
+  hud.textContent = "取舍模式 " + (triageIdx + 1) + "/" + triageIds.length + " · j/k 移动 · h 隐藏/恢复 · Esc 退出";
+}
+function triagePaint() {
+  $$("#cards .triage-cur").forEach(function (el) { el.classList.remove("triage-cur"); });
+  var id = triageIds[triageIdx];
+  var el = id && document.querySelector('#cards [data-id="' + id + '"]');
+  if (el) { el.classList.add("triage-cur"); el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  triageHud();
+}
+function triageStart() { // 从视口内最近的一行开始，不在视口就从头
+  triageCollect();
+  if (!triageIds.length) { toast("当前文档没有可取舍的条目"); return; }
+  var best = Infinity, mid = 0, vh = window.innerHeight;
+  triageIds.forEach(function (id, i) {
+    var el = document.querySelector('#cards [data-id="' + id + '"]');
+    if (!el) return;
+    var r = el.getBoundingClientRect();
+    var d = r.top < 0 ? -r.top : r.top > vh ? r.top - vh : 0;
+    if (d < best) { best = d; mid = i; }
+  });
+  triageIdx = mid;
+  triagePaint();
+}
+function triageExit() {
+  if (triageIdx < 0) return;
+  triageIdx = -1; triageIds = [];
+  var hud = document.getElementById("triage-hud");
+  if (hud) hud.remove();
+  $$("#cards .triage-cur").forEach(function (el) { el.classList.remove("triage-cur"); });
+}
+function triageMove(step) {
+  triageIdx = Math.min(triageIds.length - 1, Math.max(0, triageIdx + step));
+  triagePaint();
+}
+function triageToggle() { // 与行内眼睛同一语义：主简历可见行没有眼睛（低频走 ⋯ 菜单），这里同样拦截
+  var id = triageIds[triageIdx];
+  var f0 = id && findAny(id);
+  if (!f0) return;
+  if (state.name === "主简历" && !f0.obj.hidden) { toast("主简历里隐藏是低频操作，请用行尾 ⋯ 菜单"); return; }
+  f0.obj.hidden = !f0.obj.hidden;
+  afterChange(true, true); // 全量重渲染：压缩、琥珀眼睛、「已隐藏 N」chip 全部同步（切换类：不弹 toast）
+  triageCollect();         // 重渲染后行数可能变化（压缩不改行数，防御性重收集）
+  if (triageIdx >= triageIds.length) triageIdx = triageIds.length - 1;
+  triagePaint();
+}
+
 function switchDoc(name) {
   flushSave(); // 先把上一个文档挂起的编辑落盘，避免 900ms 窗口内切档串写
+  triageExit(); // 取舍模式不跨文档：高亮与 HUD 是旧文档 DOM 的引用
   state.name = name;
   try { localStorage.setItem("vui-last", name); } catch (e) {}
   return getJSON("/api/doc?name=" + encodeURIComponent(name)).then(function (doc) {
@@ -967,15 +1032,24 @@ function bindEvents() {
   /* 加粗按压态跟踪：光标/选区在 ** 内时点亮该行 B 按钮 */
   document.addEventListener("selectionchange", syncBoldState);
 
-  /* 全局快捷键：Ctrl+S 保存 / Ctrl+Z·Y 撤销重做 / Ctrl+E 导出 / Ctrl+B 加粗切换 / Ctrl+J AI 助手 / ? 引导 / Esc 关弹层 */
+  /* 全局快捷键：Ctrl+S 保存 / Ctrl+Z·Y 撤销重做 / Ctrl+E 导出 / Ctrl+B 加粗切换 / Ctrl+J AI 助手 / T 取舍模式 / ? 引导 / Esc 关弹层 */
   document.addEventListener("keydown", function (e) {
     var k = (e.key || "").toLowerCase();
     if (k === "escape") {
-      if (document.getElementById("modal")) { closeModal(); return; } // Esc 只关最顶层：先弹窗，再操作菜单，最后 AI 面板
+      if (document.getElementById("modal")) { closeModal(); return; } // Esc 只关最顶层：先弹窗，再操作菜单，再取舍模式，最后 AI 面板
       if (menuEl) { closeMenu(); return; }
+      if (triageIdx >= 0) { triageExit(); return; }
       toggleAIPanel(false);
       return;
     }
+    var typing = e.target && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT");
+    if (!typing && !document.getElementById("modal") && triageIdx >= 0) { // 取舍模式键位（输入框聚焦时让位给正常打字）
+      if (k === "j" || k === "arrowdown") { e.preventDefault(); triageMove(1); return; }
+      if (k === "k" || k === "arrowup") { e.preventDefault(); triageMove(-1); return; }
+      if (k === "h") { e.preventDefault(); triageToggle(); return; }
+      if (k === "t") { e.preventDefault(); triageExit(); return; }
+    }
+    if (!typing && !document.getElementById("modal") && !menuEl && k === "t") { e.preventDefault(); triageStart(); return; }
     if (k === "?" && e.target && e.target.tagName !== "TEXTAREA" && e.target.tagName !== "INPUT") {
       e.preventDefault(); showOnboard(true); return;
     }
