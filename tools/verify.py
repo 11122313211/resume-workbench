@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=35" in page and "editor.css?v=31" in page
+    ok = "editor.js?v=36" in page and "editor.css?v=32" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=35 与 editor.css?v=31" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=36 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -371,14 +371,16 @@ def sec_static():
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
                "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "showPhotoZoom",
-               "showStats", "cycleDeliv", "exportByName", "openFind", "cycleDoc", "masterAt", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
+               "showStats", "renderStats", "cycleDeliv", "exportByName", "openFind", "updateStatsBadge",
+               "cycleDoc", "masterAt", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
         "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
 
     rd = read_text(ROOT / "README.md")
     marks = ["Alt+↑↓", "Ctrl+S", "Ctrl+E", "Ctrl+J", "交付体检", "历史备份", "导出状态点",
-             "主简历漂移提示", "✎ 改名", "🤖", "T 取舍模式", "1-9", "投递一览", "投递状态", "一键导出", "Ctrl+F"]
+             "主简历漂移提示", "✎ 改名", "🤖", "T 取舍模式", "1-9", "投递一览", "投递状态", "一键导出", "Ctrl+F",
+             "琥珀数字徽标", "按投递状态筛选"]
     miss = [x for x in marks if x not in rd]
     add("STATIC", "README 手册契约", "PASS" if not miss else "FAIL",
         "键位表与功能入口描述全部在位（手册=实现）" if not miss else "缺: " + ",".join(miss))
@@ -1174,6 +1176,28 @@ var CASES = {
     log("find/close", true, "Esc 关闭查找条");
   },
 
+  "statsfilter": async function () {  /* 台账收尾（R36）：📊 徽标在位 → 已投筛选只剩已投副本 → 全部恢复 */
+    await loadEditor(DOC);
+    await wwait(function () { return idoc().querySelectorAll("#rail-docs .rail-row").length >= 1; }, 8000, "列表渲染");
+    var badge = await wwait(function () { return q("[data-nav='stats'] .stale-badge"); }, 8000, "📊 琥珀徽标出现");
+    log("statsfilter/badge", !!badge, "改过未重导数在侧栏 📊 上零点击可见");
+    clickEl("[data-nav='stats']");
+    await wwait(function () {
+      var t = q("#modal .m-title");
+      return t && t.textContent.indexOf("投递一览") !== -1;
+    }, 4000, "投递一览弹窗");
+    await wwait(function () { return q('#modal .stats-row[data-doc="' + DOC + '"]'); }, 4000, "本副本行存在");
+    var tab = await wwait(function () { return q('#modal .stats-tab[data-sf="已投"]'); }, 4000, "状态筛选 chips 在位");
+    tab.click();
+    await wwait(function () {
+      return q('#modal .stats-row[data-doc="' + DOC + '"]') && !q('#modal .stats-row[data-doc="' + QS.get("target") + '"]');
+    }, 4000, "已投筛选只剩已投副本");
+    log("statsfilter/filter", true, "按投递状态筛选生效（未投副本被滤掉）");
+    idoc().querySelector('#modal .stats-tab[data-sf=""]').click();
+    await wwait(function () { return q('#modal .stats-row[data-doc="' + QS.get("target") + '"]'); }, 4000, "全部视图恢复");
+    log("statsfilter/allback", true, "切回全部视图行恢复");
+  },
+
   "chipjump": async function () {   /* 「已隐藏 N」chip 点击：进取舍模式并定位第一个隐藏行 */
     await loadEditor(DOC);
     function press(key) {
@@ -1554,7 +1578,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1563,7 +1587,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1716,6 +1740,22 @@ def sec_headless():
             headless_case("find", doc=full_fd)
         except Exception as e:
             add("HEADLESS", "find", "FAIL", "准备副本失败: %s" % e)
+
+        def prep_sfl():   # 每次尝试重建：-sf 副本带旧导出戳+新保存 → 琥珀；投递状态已投；-s2 副本保持未投未导出
+            make_copy("-sf")
+            make_copy("-s2")
+            nm = "jobs/verify-ui-" + TS + "-sf"
+            stl, dl = get_doc(nm)
+            dl.setdefault("meta", {})["exportedAt"] = "2026-01-01T00:00:00"  # 客户端带的戳保留 → savedAt 更新 → 琥珀态
+            http_req("POST", "/api/save", {"name": nm, "doc": dl})
+            http_req("POST", "/api/delivery", {"name": nm, "st": "已投"})
+
+        try:
+            full_sf, _ids_sf = make_copy("-sf")
+            full_s2, _ids_s2 = make_copy("-s2")
+            headless_case("statsfilter", prepare=prep_sfl, doc=full_sf, target=full_s2)
+        except Exception as e:
+            add("HEADLESS", "statsfilter", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_cj, _ids_cj = make_copy("-cj")

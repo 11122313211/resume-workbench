@@ -209,6 +209,7 @@ function loadList() {
     state.list = r.docs || [];
     state.meta = r.meta || {}; // 各文档 savedAt/exportedAt（服务端时钟），驱动侧栏导出状态点
     renderRail();
+    updateStatsBadge(state.meta);
     if (!state.name && state.list.length) { // 恢复上次编辑的文档（localStorage 记忆）
       var last = null;
       try { last = localStorage.getItem("vui-last"); } catch (e) {}
@@ -222,7 +223,23 @@ function refreshRailMeta() { // 保存/导出后轻刷新侧栏状态点（只�
   getJSON("/api/list").then(function (r) {
     state.meta = r.meta || {};
     renderRail();
+    updateStatsBadge(state.meta);
   }).catch(function () {});
+}
+function updateStatsBadge(meta) { // 📊 琥珀数字徽标（R36）：导出后又改过（PDF 非最新）的副本数，零点击可见
+  var b = document.querySelector("[data-nav='stats']");
+  if (!b) return;
+  var n = 0, m = meta || {};
+  Object.keys(m).forEach(function (k) {
+    var d = m[k];
+    if (d.savedAt && d.exportedAt && d.savedAt > d.exportedAt) n++;
+  });
+  var el = b.querySelector(".stale-badge");
+  if (n && !el) { el = document.createElement("span"); el.className = "stale-badge"; b.appendChild(el); }
+  if (n) {
+    el.textContent = n;
+    el.title = n + " 份副本导出后又改过，PDF 非最新（点开投递一览查看）";
+  } else if (el) el.remove();
 }
 /* ---------- 交付体检（R26）：导出前的高置信问题清单，宁缺勿滥 ---------- */
 function lintDoc(doc) {
@@ -349,67 +366,78 @@ function exportByName(name) { // 一览行内一键导出（R34）：跳到该�
     if (b) b.click(); else toast("找不到导出入口");
   }).catch(function () { toast("打开副本失败：" + name.replace(/^jobs\//, "")); });
 }
-function showStats() { // 投递一览（R32/R34）：日期倒序、导出状态、投递状态胶囊、未导出行 ⬇ 一键导出；点行跳转
+var statsData = null, statsFilter = ""; // 一览数据快照与当前投递状态筛选（R36：筛选切换就地重建，不重新请求）
+function showStats() {
   closeModal();
-  getJSON("/api/list").then(function (r) {
-    var meta = r.meta || {};
-    var dlv = r.delivery || {};
-    var items = (r.docs || []).filter(function (n) { return n !== "主简历"; }).map(function (n) {
-      var short = n.replace(/^jobs\//, "");
-      var parts = short.split("_");
-      var date = /^\d{4}-\d{2}-\d{2}$/.test(parts[0] || "") ? parts[0] : "—";
-      var company = parts[1] || "—";
-      var role = parts.slice(2).join("_") || "—";
-      var m = meta[n] || {};
-      var st, cls;
-      if (m.exportedAt && m.savedAt && m.savedAt > m.exportedAt) { st = "改过未重导"; cls = "warn"; }
-      else if (m.exportedAt) { st = "已导出"; cls = "ok"; }
-      else { st = "未导出"; cls = "none"; }
-      return { n: n, date: date, company: company, role: role, st: st, cls: cls,
-               exp: (m.exportedAt || "").replace("T", " ").slice(0, 16) || "—", dv: dlv[n] || {} };
-    });
-    items.sort(function (a, b) { // 最新投递在前，无日期副本（老文档/测试副本）排最后
-      if (a.date === b.date) return 0;
-      if (a.date === "—") return 1;
-      if (b.date === "—") return -1;
-      return a.date < b.date ? 1 : -1;
-    });
-    var rows = items.map(function (it) {
-      var di = Math.max(0, DELIV_ST.indexOf(it.dv.st || "未投"));
-      return "<tr class='stats-row' data-doc=\"" + esc(it.n) + "\"><td>" + esc(it.date) + "</td><td>" + esc(it.company) +
-        "</td><td>" + esc(it.role) + "</td><td><span class='stats-dot " + it.cls + "'></span>" + it.st +
-        "</td><td class='stats-time'>" + esc(it.exp) +
-        "</td><td><button class='deliv-pill d" + di + "' data-dv=\"" + esc(it.n) +
-        "\" title=\"点击推进到「" + DELIV_ST[(di + 1) % DELIV_ST.length] + "」\">" + esc(it.dv.st || "未投") + "</button></td>" +
-        "<td>" + (it.st !== "已导出" ? "<button class='stats-export' data-ex=\"" + esc(it.n) +
-        "\" title=\"跳到该副本并走标准导出（含交付体检）\">" + (it.st === "改过未重导" ? "⬇ 重导" : "⬇ 导出") + "</button>" : "") + "</td></tr>";
-    }).join("");
-    var counts = DELIV_ST.slice(1).map(function (s) {
+  getJSON("/api/list").then(function (r) { statsData = r; renderStats(); })
+    .catch(function () { toast("读取投递状态失败：本地服务可能没在运行"); });
+}
+function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
+  closeModal();
+  var r = statsData || {};
+  var meta = r.meta || {};
+  var dlv = r.delivery || {};
+  var items = (r.docs || []).filter(function (n) { return n !== "主简历"; }).map(function (n) {
+    var short = n.replace(/^jobs\//, "");
+    var parts = short.split("_");
+    var date = /^\d{4}-\d{2}-\d{2}$/.test(parts[0] || "") ? parts[0] : "—";
+    var company = parts[1] || "—";
+    var role = parts.slice(2).join("_") || "—";
+    var m = meta[n] || {};
+    var st, cls;
+    if (m.exportedAt && m.savedAt && m.savedAt > m.exportedAt) { st = "改过未重导"; cls = "warn"; }
+    else if (m.exportedAt) { st = "已导出"; cls = "ok"; }
+    else { st = "未导出"; cls = "none"; }
+    return { n: n, date: date, company: company, role: role, st: st, cls: cls,
+             exp: (m.exportedAt || "").replace("T", " ").slice(0, 16) || "—", dv: dlv[n] || {} };
+  });
+  items.sort(function (a, b) { // 最新投递在前，无日期副本（老文档/测试副本）排最后
+    if (a.date === b.date) return 0;
+    if (a.date === "—") return 1;
+    if (b.date === "—") return -1;
+    return a.date < b.date ? 1 : -1;
+  });
+  var chips = "<button class='stats-tab" + (statsFilter === "" ? " on" : "") + "' data-sf=''>全部 " + items.length + "</button>" +
+    DELIV_ST.map(function (s) {
       var c = 0;
-      Object.keys(dlv).forEach(function (k) { if ((dlv[k] || {}).st === s) c++; });
-      return c ? s + " " + c : "";
-    }).filter(Boolean).join(" · ");
-    var ov = document.createElement("div");
-    ov.className = "modal-ov"; ov.id = "modal";
-    ov.innerHTML = "<div class='modal modal-wide'><div class='m-title'>📊 投递一览</div>" +
-      (rows ? "<table class='stats-table'><thead><tr><th>日期</th><th>公司</th><th>岗位</th><th>导出状态</th><th>导出时间</th><th>投递状态</th><th></th></tr></thead><tbody>" +
-        rows + "</tbody></table><p class='ob-tip'>点行跳到对应副本，点状态胶囊推进投递进度（未投→已投→面试→通过→挂）；「改过未重导」= 导出后又编辑过，点 ⬇ 重导即补最新版（主简历不计入投递）" +
-        (counts ? "。进度：" + counts : "") + "</p>" :
-        "<div class='ai-empty'>还没有岗位副本。左侧「＋新建岗位副本」创建后，这里会汇总各份的导出状态</div>") +
-      "<div class='m-row'><button class='btn' data-m='new'>＋ 新建岗位副本</button><button class='btn' data-m='no'>关闭</button></div></div>";
-    document.body.appendChild(ov);
-    ov.addEventListener("click", function (e) {
-      var a = e.target.getAttribute && e.target.getAttribute("data-m");
-      if (e.target === ov || a === "no") { ov.remove(); return; }
-      if (a === "new") { ov.remove(); var nb = document.querySelector('[data-nav="newjob"]'); if (nb) nb.click(); return; }
-      var ex = e.target.closest && e.target.closest(".stats-export");
-      if (ex) { exportByName(ex.getAttribute("data-ex")); return; } // 一键导出优先于行跳转
-      var pill = e.target.closest && e.target.closest(".deliv-pill");
-      if (pill) { cycleDeliv(pill.getAttribute("data-dv"), pill.textContent); return; } // 胶囊优先于行跳转
-      var tr = e.target.closest && e.target.closest(".stats-row");
-      if (tr) { ov.remove(); switchDoc(tr.getAttribute("data-doc")); }
-    });
-  }).catch(function () { toast("读取投递状态失败：本地服务可能没在运行"); });
+      items.forEach(function (it) { if ((it.dv.st || "未投") === s) c++; });
+      return "<button class='stats-tab" + (statsFilter === s ? " on" : "") + "' data-sf='" + s + "'>" + s + " " + c + "</button>";
+    }).join("");
+  var shown = statsFilter === "" ? items : items.filter(function (it) { return (it.dv.st || "未投") === statsFilter; });
+  var rows = shown.map(function (it) {
+    var di = Math.max(0, DELIV_ST.indexOf(it.dv.st || "未投"));
+    return "<tr class='stats-row' data-doc=\"" + esc(it.n) + "\"><td>" + esc(it.date) + "</td><td>" + esc(it.company) +
+      "</td><td>" + esc(it.role) + "</td><td><span class='stats-dot " + it.cls + "'></span>" + it.st +
+      "</td><td class='stats-time'>" + esc(it.exp) +
+      "</td><td><button class='deliv-pill d" + di + "' data-dv=\"" + esc(it.n) +
+      "\" title=\"点击推进到「" + DELIV_ST[(di + 1) % DELIV_ST.length] + "」\">" + esc(it.dv.st || "未投") + "</button></td>" +
+      "<td>" + (it.st !== "已导出" ? "<button class='stats-export' data-ex=\"" + esc(it.n) +
+      "\" title=\"跳到该副本并走标准导出（含交付体检）\">" + (it.st === "改过未重导" ? "⬇ 重导" : "⬇ 导出") + "</button>" : "") + "</td></tr>";
+  }).join("");
+  var body;
+  if (rows) body = "<table class='stats-table'><thead><tr><th>日期</th><th>公司</th><th>岗位</th><th>导出状态</th><th>导出时间</th><th>投递状态</th><th></th></tr></thead><tbody>" +
+      rows + "</tbody></table><p class='ob-tip'>点行跳到对应副本，点状态胶囊推进投递进度（未投→已投→面试→通过→挂）；「改过未重导」= 导出后又编辑过，点 ⬇ 重导即补最新版（主简历不计入投递）</p>";
+  else body = "<div class='ai-empty'>" + (items.length ? "没有「" + esc(statsFilter) + "」状态的副本" :
+      "还没有岗位副本。左侧「＋新建岗位副本」创建后，这里会汇总各份的导出状态") + "</div>";
+  var ov = document.createElement("div");
+  ov.className = "modal-ov"; ov.id = "modal";
+  ov.innerHTML = "<div class='modal modal-wide'><div class='m-title'>📊 投递一览</div>" +
+    "<div class='stats-tabs'>" + chips + "</div>" + body +
+    "<div class='m-row'><button class='btn' data-m='new'>＋ 新建岗位副本</button><button class='btn' data-m='no'>关闭</button></div></div>";
+  document.body.appendChild(ov);
+  ov.addEventListener("click", function (e) {
+    var a = e.target.getAttribute && e.target.getAttribute("data-m");
+    if (e.target === ov || a === "no") { ov.remove(); return; }
+    if (a === "new") { ov.remove(); var nb = document.querySelector('[data-nav="newjob"]'); if (nb) nb.click(); return; }
+    var tab = e.target.closest && e.target.closest(".stats-tab");
+    if (tab) { statsFilter = tab.getAttribute("data-sf") || ""; renderStats(); return; } // 筛选切换就地重建
+    var ex = e.target.closest && e.target.closest(".stats-export");
+    if (ex) { exportByName(ex.getAttribute("data-ex")); return; } // 一键导出优先于行跳转
+    var pill = e.target.closest && e.target.closest(".deliv-pill");
+    if (pill) { cycleDeliv(pill.getAttribute("data-dv"), pill.textContent); return; } // 胶囊优先于行跳转
+    var tr = e.target.closest && e.target.closest(".stats-row");
+    if (tr) { ov.remove(); switchDoc(tr.getAttribute("data-doc")); }
+  });
 }
 
 function showLintModal(issues, onExport) { // 体检清单 → 用户拍板：取消导出 / 仍要导出（不阻断，只提示）

@@ -370,3 +370,13 @@ body.splitting { cursor: col-resize; user-select: none; }
 #find-bar button:hover { color: #222; }
 #find-count { font-size: 11.5px; color: #8892a0; min-width: 34px; text-align: center; white-space: nowrap; }
 #cards .find-cur { outline: 2px solid #f0b429; outline-offset: 1px; border-radius: 6px; }
+/* ===== 投递台账收尾（R36）：📊 琥珀数字徽标 + 一览状态筛选 chips ===== */
+.stale-badge { position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  background: #d97706; color: #fff; border-radius: 9px; min-width: 15px; height: 15px; line-height: 15px;
+  font-size: 10.5px; text-align: center; padding: 0 3px; font-weight: 700; box-shadow: 0 0 0 3px rgba(217,119,6,.16); }
+#rail.pinned .stale-badge { right: 14px; }
+.stats-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 10px; }
+.stats-tab { border: 1px solid #d5dae2; background: #fff; border-radius: 999px; padding: 2px 10px;
+  font-size: 11.5px; cursor: pointer; color: #66707e; white-space: nowrap; }
+.stats-tab:hover { background: #f4f6fa; }
+.stats-tab.on { background: #2f6fed; border-color: #2f6fed; color: #fff; }
