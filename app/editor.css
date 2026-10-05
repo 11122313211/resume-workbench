@@ -355,3 +355,8 @@ body.splitting { cursor: col-resize; user-select: none; }
 .deliv-pill.d2 { background: #fdf3e3; border-color: #f0d9a8; color: #b45309; }
 .deliv-pill.d3 { background: #e5f6ec; border-color: #b5e3c6; color: #1e7e46; }
 .deliv-pill.d4 { background: #fdeaea; border-color: #f2c4c4; color: #b91c1c; }
+/* 一览加宽与行内一键导出（R34） */
+.modal-wide { width: min(780px, 94vw); }
+.stats-export { border: 1px solid #ccd3dc; background: #fff; border-radius: 6px; padding: 2px 8px;
+  font-size: 11.5px; cursor: pointer; color: #445; white-space: nowrap; }
+.stats-export:hover { background: #f4f6fa; }
