@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>简历可视化编辑工作台</title>
-<link rel="stylesheet" href="editor.css?v=13">
+<link rel="stylesheet" href="editor.css?v=14">
 </head>
 <body>
 <!-- 悬浮侧边导航：上区=身份与内容（当前文档/文档列表/新建/AI），下区=交付与元动作（导出/保存/引导/钉住/状态行）。
@@ -28,6 +28,14 @@
     <span class="con">AI 助手</span>
   </button>
   <div class="rail-spacer"></div>
+  <button class="rail-item" id="rail-undo" data-nav="undo" title="撤销（Ctrl+Z）" disabled>
+    <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6l-4 4 4 4"/><path d="M4 10h9a5 5 0 0 1 0 10h-3"/></svg></span>
+    <span class="con">撤销</span>
+  </button>
+  <button class="rail-item" id="rail-redo" data-nav="redo" title="重做（Ctrl+Shift+Z）" disabled>
+    <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 6l4 4-4 4"/><path d="M20 10h-9a5 5 0 0 0 0 10h3"/></svg></span>
+    <span class="con">重做</span>
+  </button>
   <button class="rail-item" data-nav="export" title="导出 A4 PDF（Ctrl+E）——自动先保存">
     <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4"/><path d="M5 20h14"/></svg></span>
     <span class="con">导出 PDF</span>
@@ -106,6 +114,6 @@
 <div id="toast"></div>
 <input type="file" id="photo-file" accept="image/*" class="hidden">
 <script src="vendor/Sortable.min.js?v=6"></script>
-<script src="editor.js?v=15"></script>
+<script src="editor.js?v=16"></script>
 </body>
 </html>

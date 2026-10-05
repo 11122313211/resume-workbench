@@ -314,9 +314,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=15" in page and "editor.css?v=13" in page
+    ok = "editor.js?v=16" in page and "editor.css?v=14" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=15 与 editor.css?v=13" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=16 与 editor.css?v=14" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -776,6 +776,39 @@ var CASES = {
     log("triage/exit", true, "Esc 退出取舍模式");
   },
 
+  "undobtn": async function () {   /* 手打 bullet 落模型（存量 bug 回归守卫）+ 侧栏 ↶↷ 按钮全链路 */
+    await loadEditor(DOC);
+    var ta = await wwait(function () { return q("#cards .bullet-row textarea"); }, 8000, "首个 bullet textarea");
+    var orig = ta.value;
+    await wwait(function () {
+      var b = idoc().getElementById("rail-undo");
+      return b && b.disabled;
+    }, 4000, "初始 ↶ 禁用");
+    log("undobtn/init", true, "无改动时 ↶ 禁用");
+    ta.value = orig + "【增】";
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    var bmodel = iw().findBullet(ta.getAttribute("data-id"));
+    await wwait(function () { return bmodel.bullet.text === orig + "【增】"; }, 4000, "手打文本写入数据模型");
+    log("undobtn/model", true, "手打文本已落模型");
+    await wwait(function () {
+      var b = idoc().getElementById("rail-undo");
+      return b && !b.disabled;
+    }, 4000, "改动后 ↶ 启用");
+    log("undobtn/enable", true, "输入后 ↶ 启用");
+    idoc().getElementById("rail-undo").click();
+    await wwait(function () {
+      var t2 = q("#cards .bullet-row textarea");
+      return t2 && t2.value === orig;
+    }, 6000, "点击 ↶ 还原内容");
+    log("undobtn/undo", true, "↶ 撤销与 Ctrl+Z 等效");
+    idoc().getElementById("rail-redo").click();
+    await wwait(function () {
+      var t3 = q("#cards .bullet-row textarea");
+      return t3 && t3.value === orig + "【增】";
+    }, 6000, "点击 ↷ 恢复改动");
+    log("undobtn/redo", true, "↷ 重做恢复改动");
+  },
+
   menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
     await loadEditor(DOC);
     function visSec() {
@@ -1012,7 +1045,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1021,7 +1054,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1096,6 +1129,12 @@ def sec_headless():
             headless_case("triage", doc=full_t)
         except Exception as e:
             add("HEADLESS", "triage", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_u, _ids_u = make_copy("-u")
+            headless_case("undobtn", doc=full_u)
+        except Exception as e:
+            add("HEADLESS", "undobtn", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

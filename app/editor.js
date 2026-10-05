@@ -73,6 +73,7 @@ function beforeChange(force) { // afterChange 开头调用：把"上一稳定态
       if (undoStack.length > 100) undoStack.shift();
       redoStack.length = 0;
       lastPush = now;
+      updateUndoBtns();
     }
   }
 }
@@ -88,13 +89,20 @@ function undo() {
   if (!undoStack.length) return;
   redoStack.push(snap());
   applySnap(undoStack.pop());
+  updateUndoBtns();
   flashOk("已撤销 ✓");
 }
 function redo() {
   if (!redoStack.length) return;
   undoStack.push(snap());
   applySnap(redoStack.pop());
+  updateUndoBtns();
   flashOk("已重做 ✓");
+}
+function updateUndoBtns() { // ↶↷ 可发现性：按钮态跟随撤销栈，不用记快捷键
+  var u = document.getElementById("rail-undo"), r = document.getElementById("rail-redo");
+  if (u) u.disabled = !undoStack.length;
+  if (r) r.disabled = !redoStack.length;
 }
 
 /* ---------- 轻量弹窗 ---------- */
@@ -296,6 +304,7 @@ function switchDoc(name) {
       b.setAttribute("aria-pressed", on ? "true" : "false");
     });
     undoStack.length = 0; redoStack.length = 0; baseline = snap(); // 撤销栈不跨文档
+    updateUndoBtns();
     state.appliedAI = {}; // AI 已应用标记不跨文档
     resetAIRequestState();
     if (!document.getElementById("ai-panel").classList.contains("ai-closed")) { aiJdFor = null; toggleAIPanel(true); } // 面板开着：JD 与建议跟随新文档
@@ -688,7 +697,7 @@ function bindEvents() {
     if (k === "meta") state.doc.meta[f] = v;
     else if (k === "section") { var s = secById(id); if (s) s[f] = v; }
     else if (k === "entry") { var r = findEntry(id); if (r) r.entry[f] = v; }
-    else if (k === "bullet") { var b = findBullet(id); if (b) b.text = v; }
+    else if (k === "bullet") { var b = findBullet(id); if (b) b.bullet.text = v; } // 写 b.bullet.text（findBullet 返回包装对象；曾误写 b.text 导致手打 bullet 从未落模型）
     afterChange(false);
   });
 
@@ -924,6 +933,8 @@ function bindEvents() {
     else if (nav === "newjob") newJobFlow();
     else if (nav === "ai") toggleAIPanel();
     else if (nav === "save") saveNow();
+    else if (nav === "undo") undo();
+    else if (nav === "redo") redo();
     else if (nav === "export") exportNow(b);
     else if (nav === "help") showOnboard(true);
     else if (nav === "pin") {
