@@ -314,9 +314,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=18" in page and "editor.css?v=16" in page
+    ok = "editor.js?v=19" in page and "editor.css?v=17" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=18 与 editor.css?v=16" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=19 与 editor.css?v=17" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -878,6 +878,23 @@ var CASES = {
     log("idfix/unique", true, "重复 id 打开即修复并落盘（章节内容未丢）");
   },
 
+  "aikeys": async function () {   /* AI 面板 1-9 快速应用：按 1 应用第一条建议，卡片带序号 */
+    await loadEditor(DOC);
+    await openPanel();
+    await wwait(function () { return q("#ai-cards .ai-card"); }, 8000, ".ai-card 渲染");
+    await wwait(function () {
+      var n = q("#ai-cards .ai-card .ai-num");
+      return n && n.textContent === "1";
+    }, 4000, "卡片带序号 1");
+    log("aikeys/num", true, "建议卡片显示序号 1");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "1", bubbles: true }));
+    await wwait(function () {
+      var t = taOf(TARGET);
+      return t && t.value.indexOf("【验证】键盘应用的建议文本") !== -1;
+    }, 8000, "按 1 后建议已应用");
+    log("aikeys/apply", true, "键盘 1 应用第一条建议成功");
+  },
+
   menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
     await loadEditor(DOC);
     function visSec() {
@@ -1114,7 +1131,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1123,7 +1140,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1228,6 +1245,18 @@ def sec_headless():
             headless_case("idfix", prepare=prep_idfix, doc=full_d)
         except Exception as e:
             add("HEADLESS", "idfix", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_k, ids_k = make_copy("-k")
+            k1 = ids_k[0] if ids_k else "b-edu1"
+
+            def prep_keys():
+                make_copy("-k")
+                write_suggestion({"for": full_k, "items": [
+                    {"type": "rewrite", "target": k1, "text": "【验证】键盘应用的建议文本", "reason": "验证 1-9"}]})
+            headless_case("aikeys", prepare=prep_keys, doc=full_k, target=k1)
+        except Exception as e:
+            add("HEADLESS", "aikeys", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

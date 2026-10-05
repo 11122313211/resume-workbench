@@ -1132,6 +1132,11 @@ function bindEvents() {
       if (k === "t") { e.preventDefault(); triageExit(); return; }
     }
     if (!typing && !document.getElementById("modal") && !menuEl && k === "t") { e.preventDefault(); triageStart(); return; }
+    if (!typing && !document.getElementById("modal") && /^[1-9]$/.test(k) &&
+        !document.getElementById("ai-panel").classList.contains("ai-closed")) { // AI 面板开着：1-9 快速应用对应建议
+      var aiBox = document.getElementById("ai-cards");
+      if (aiBox.__items && aiBox.__items[+k - 1]) { e.preventDefault(); aiApply(+k - 1); return; }
+    }
     if (k === "?" && e.target && e.target.tagName !== "TEXTAREA" && e.target.tagName !== "INPUT") {
       e.preventDefault(); showOnboard(true); return;
     }
@@ -1352,6 +1357,24 @@ function charDiff(a, b) { // 字符级轻量 diff：公共前后缀对齐，中�
   return { pre: a.slice(0, s), midOld: a.slice(s, a.length - e), midNew: b.slice(s, b.length - e), post: a.slice(a.length - e) };
 }
 
+function aiApply(i2) { // 应用第 i2 条建议：按钮点击与键盘 1-9 共用
+  var box = document.getElementById("ai-cards");
+  var it = box.__items && box.__items[i2];
+  if (!it || it.type === "note" || state.appliedAI[i2]) return;
+  var found = findAny(it.target || "");
+  if (!found) { // 目标可能已被删改：如实告知，不假成功
+    toast("第 " + (i2 + 1) + " 条建议的目标条目已不在当前文档中（文档可能已改动）");
+    return;
+  }
+  applyItem(it);
+  state.appliedAI[i2] = true;
+  afterChange(true, true);
+  locateCard(it.target);
+  toast("已应用 AI 建议", 8000, { label: "撤销", fn: function () {
+    delete state.appliedAI[i2]; undo(); loadSuggestions();
+  } });
+  loadSuggestions();
+}
 function loadSuggestions() {
   getJSON("/api/ai-suggestion").then(function (r) {
     var box = document.getElementById("ai-cards");
@@ -1382,7 +1405,7 @@ function loadSuggestions() {
     if (!arr.length) { // 无建议：空状态对接新三步
       aiHaveValidSug = false; box.__items = null;
       toolbar.classList.add("hidden");
-      box.innerHTML = "<div class='ai-empty'>还没有建议。按上面 3 步走：贴 JD → 点「发起 AI 优化」→ 到你的 AI agent 粘贴运行；<br>建议写好后会自动出现在这里（也可点 ↻ 手动刷新）</div>";
+      box.innerHTML = "<div class='ai-empty'>还没有建议。按上面 3 步走：贴 JD → 点「发起 AI 优化」→ 到你的 AI agent 粘贴运行；<br>建议写好后会自动出现在这里（也可点 ↻ 手动刷新），按 1-9 数字键可快速应用对应建议</div>";
       updateAISteps();
       return;
     }
@@ -1412,7 +1435,7 @@ function loadSuggestions() {
         }
       }
       return "<div class='ai-card" + (applied ? " applied" : "") + "'>" +
-        "<span class='tag'>" + tag + "</span> " +
+        "<span class='tag'>" + tag + "</span><span class='ai-num'>" + (i + 1) + "</span> " +
         (target ? "对象：" + esc(objText.slice(0, 40)) + "<br>" : "") +
         diffHtml +
         (it.type !== "rewrite" ? "<div>" + body.replace(/\n/g, "<br>") + "</div>" : "") +
@@ -1421,20 +1444,7 @@ function loadSuggestions() {
     }).join("");
     $("[data-ai]", box).forEach(function (b) {
       b.addEventListener("click", function () {
-        var i2 = +b.getAttribute("data-ai"), it = box.__items[i2];
-        var found = findAny(it.target || "");
-        if (!found) { // 目标可能已被删改：如实告知，不假成功
-          toast("第 " + (i2 + 1) + " 条建议的目标条目已不在当前文档中（文档可能已改动）");
-          return;
-        }
-        applyItem(it);
-        state.appliedAI[i2] = true;
-        afterChange(true, true);
-        locateCard(it.target);
-        toast("已应用 AI 建议", 8000, { label: "撤销", fn: function () {
-          delete state.appliedAI[i2]; undo(); loadSuggestions();
-        } });
-        loadSuggestions();
+        aiApply(+b.getAttribute("data-ai"));
       });
     });
     updateAISteps();

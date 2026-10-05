@@ -285,3 +285,7 @@ body.splitting { cursor: col-resize; user-select: none; }
 /* ===== JD 相关性标记（取舍辅助） ===== */
 .jd-hit { flex: none; font-size: 10.5px; line-height: 1; color: #b45309; background: #fdf3e3;
   border: 1px solid #f3ddb5; border-radius: 999px; padding: 3px 7px; }
+
+/* ===== AI 建议卡片序号（键盘 1-9 快速应用提示） ===== */
+.ai-num { display: inline-block; margin-left: 6px; font-size: 10.5px; line-height: 1; color: #556;
+  background: #eef1f5; border-radius: 999px; padding: 3px 7px; vertical-align: 1px; }
