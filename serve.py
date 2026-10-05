@@ -101,6 +101,23 @@ def write_export_target(name):
     p.write_text(json.dumps({"name": safe_name(name)}, ensure_ascii=False), encoding="utf-8")
 
 
+DELIV_ST = ("未投", "已投", "面试", "通过", "挂")   # 投递状态胶囊循环顺序（R33）
+
+
+def read_delivery():
+    # 投递状态 sidecar：独立于简历文档 JSON——状态切换不碰内容、不触发留底、不污染导出戳
+    p = DATA / "delivery.json"
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def write_delivery(d):
+    (DATA / "delivery.json").write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 def start_server():
     return ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
 
@@ -159,7 +176,7 @@ class Handler(SimpleHTTPRequestHandler):
                     if m.get("exportedAt") or m.get("savedAt") or m.get("masterAt"):
                         meta[n] = {"exportedAt": m.get("exportedAt"), "savedAt": m.get("savedAt"),
                                    "masterAt": m.get("masterAt")}
-                return self._json({"ok": True, "docs": docs, "meta": meta})
+                return self._json({"ok": True, "docs": docs, "meta": meta, "delivery": read_delivery()})
 
             if parsed.path == "/api/doc":
                 name = parse_qs(parsed.query).get("name", [""])[0]
@@ -258,6 +275,9 @@ class Handler(SimpleHTTPRequestHandler):
                 pdf = JOBS / (name.split("/", 1)[1] + ".pdf")
                 if pdf.is_file():
                     pdf.unlink()
+                d = read_delivery()
+                if d.pop(name, None) is not None:
+                    write_delivery(d)
                 return self._json({"ok": True})
 
             if parsed.path == "/api/rename":
@@ -284,7 +304,27 @@ class Handler(SimpleHTTPRequestHandler):
                 old_pdf = JOBS / (frm.split("/", 1)[1] + ".pdf")
                 if old_pdf.is_file():
                     old_pdf.replace(JOBS / (to.split("/", 1)[1] + ".pdf"))
+                d = read_delivery()          # 投递状态跟随改名，投递记录不因改名丢失
+                if frm in d:
+                    d[to] = d.pop(frm)
+                    write_delivery(d)
                 return self._json({"ok": True, "name": to})
+
+            if parsed.path == "/api/delivery":
+                # 投递状态跟踪（R33）：点击胶囊循环推进，sidecar 记录；未投=默认态不占存储
+                name = safe_name(str(body.get("name", "")))
+                st = str(body.get("st", ""))
+                if st not in DELIV_ST:
+                    return self._json({"ok": False, "error": "状态不合法"}, 400)
+                if not doc_path(name).is_file():
+                    return self._json({"ok": False, "error": "文档不存在"}, 404)
+                d = read_delivery()
+                if st == "未投":
+                    d.pop(name, None)
+                else:
+                    d[name] = {"st": st, "at": datetime.now().isoformat(timespec="seconds")}
+                write_delivery(d)
+                return self._json({"ok": True, "delivery": d})
 
             if parsed.path == "/api/restore":
                 # 用自动备份覆盖文档（R25）：文件名白名单校验防目录穿越；当前内容经 write_doc 先自动留底

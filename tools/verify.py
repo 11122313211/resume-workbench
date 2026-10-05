@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=32" in page and "editor.css?v=28" in page
+    ok = "editor.js?v=33" in page and "editor.css?v=29" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=32 与 editor.css?v=28" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=33 与 editor.css?v=29" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -371,14 +371,14 @@ def sec_static():
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
                "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "showPhotoZoom",
-               "showStats", "cycleDoc", "masterAt", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
+               "showStats", "cycleDeliv", "cycleDoc", "masterAt", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
         "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
 
     rd = read_text(ROOT / "README.md")
     marks = ["Alt+↑↓", "Ctrl+S", "Ctrl+E", "Ctrl+J", "交付体检", "历史备份", "导出状态点",
-             "主简历漂移提示", "✎ 改名", "🤖", "T 取舍模式", "1-9", "投递一览"]
+             "主简历漂移提示", "✎ 改名", "🤖", "T 取舍模式", "1-9", "投递一览", "投递状态"]
     miss = [x for x in marks if x not in rd]
     add("STATIC", "README 手册契约", "PASS" if not miss else "FAIL",
         "键位表与功能入口描述全部在位（手册=实现）" if not miss else "缺: " + ",".join(miss))
@@ -397,6 +397,7 @@ def sec_api(server_ok):
         add("API", "/api/ai-request 行为", "SKIP", "服务不可用")
         add("API", "一次性副本全生命周期", "SKIP", "服务不可用")
         add("API", "副本重命名", "SKIP", "服务不可用")
+        add("API", "投递状态", "SKIP", "服务不可用")
         add("API", "主简历禁删", "SKIP", "服务不可用")
         add("API", "导出 E2E（A4 PDF）", "SKIP", "服务不可用")
         add("API", "照片上传", "SKIP", "服务不可用")
@@ -498,6 +499,34 @@ def sec_api(server_ok):
     rn_ok = rn1 and st2 == 200 and st3 == 404 and st4 == 400
     add("API", "副本重命名", "PASS" if rn_ok else "FAIL",
         "rename=%s 新可读=%s 旧404=%s 主简历禁改=%s(http=%s)" % (rn1, st2 == 200, st3 == 404, st4 == 400, st4))
+
+    # c4) 投递状态（R33）：sidecar 设置/回读/非法值与未知文档拒绝/改名跟随/删除清理
+    full_ds = "jobs/verify-tmp-ds-" + TS
+    try:
+        http_req("POST", "/api/newjob", {"name": "verify-tmp-ds-" + TS})
+        st, body = http_req("POST", "/api/delivery", {"name": full_ds, "st": "已投"})
+        w1 = st == 200 and tryjson(body).get("ok") is True
+        _st, lb = http_req("GET", "/api/list")
+        dv1 = (tryjson(lb).get("delivery") or {}).get(full_ds, {})
+        r1 = dv1.get("st") == "已投" and bool(dv1.get("at"))
+        st, _b = http_req("POST", "/api/delivery", {"name": full_ds, "st": "自定义状态"})
+        bad = st == 400
+        st, _b = http_req("POST", "/api/delivery", {"name": "jobs/verify-tmp-nope-" + TS, "st": "已投"})
+        nope = st == 404
+        st, _b = http_req("POST", "/api/rename", {"from": full_ds, "to": "jobs/verify-tmp-ds2-" + TS})
+        _st, lb = http_req("GET", "/api/list")
+        dv = tryjson(lb).get("delivery") or {}
+        mig = "jobs/verify-tmp-ds2-" + TS in dv and full_ds not in dv
+        st, _b = http_req("POST", "/api/delete", {"name": "jobs/verify-tmp-ds2-" + TS})
+        _st, lb = http_req("GET", "/api/list")
+        dv = tryjson(lb).get("delivery") or {}
+        gone = "jobs/verify-tmp-ds2-" + TS not in dv
+        ds_ok = w1 and r1 and bad and nope and mig and gone
+        add("API", "投递状态", "PASS" if ds_ok else "FAIL",
+            "写入=%s 回读=%s 非法状态400=%s 未知文档404=%s 改名跟随=%s 删除清理=%s"
+            % (w1, r1, bad, nope, mig, gone))
+    except Exception as e:
+        add("API", "投递状态", "FAIL", "异常: %s" % e)
 
     # c3) 备份与恢复：两次保存留两份底 → 列表倒序 → 恢复旧版内容回得来 → 坏文件名拒绝
     full_bk = "jobs/verify-tmp-bk-" + TS
@@ -1074,6 +1103,14 @@ var CASES = {
     }, 4000, "投递一览弹窗");
     await wwait(function () { return q('#modal .stats-row[data-doc="' + DOC + '"]'); }, 4000, "本副本行存在");
     log("stats/table", true, "投递一览列出副本行（日期/公司/岗位/导出状态）");
+    var pill = q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill');
+    var before = pill.textContent;
+    pill.click();
+    await wwait(function () {
+      var p = q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill');
+      return p && p.textContent !== before;
+    }, 6000, "点胶囊状态推进");
+    log("stats/cycle", true, "投递状态胶囊点击即推进（sidecar 记录，刷新回读一致）");
     q('#modal .stats-row[data-doc="' + DOC + '"]').click();
     await wwait(function () { return !q("#modal"); }, 4000, "点行后弹窗关闭");
     await wwait(function () { return railShows(DOC); }, 6000, "定位到对应副本");
@@ -1762,6 +1799,18 @@ def cleanup_verify_docs():
     if bdir.is_dir():
         for d in bdir.glob("*verify*"):
             shutil.rmtree(d, ignore_errors=True)
+    dp = DATA / "delivery.json"  # 投递状态 sidecar：只摘除 verify 键；文件非用户原有且已空则删除
+    if dp.is_file():
+        try:
+            d = json.loads(dp.read_text(encoding="utf-8"))
+            if isinstance(d, dict) and any("verify-" in k for k in d):
+                d2 = {k: v for k, v in d.items() if "verify-" not in k}
+                if d2:
+                    dp.write_text(json.dumps(d2, ensure_ascii=False, indent=1), encoding="utf-8")
+                else:
+                    dp.unlink()
+        except Exception:
+            pass
 
 
 def report():

@@ -253,10 +253,17 @@ function lintDoc(doc) {
   });
   return issues;
 }
-function showStats() { // 投递一览（R32）：副本名解析 日期/公司/岗位，配服务端 savedAt/exportedAt 给导出状态；点行跳转
+var DELIV_ST = ["未投", "已投", "面试", "通过", "挂"]; // 投递状态循环顺序（与 serve.py DELIV_ST 白名单一致）
+function cycleDeliv(name, cur) { // 投递状态跟踪（R33）：点胶囊循环推进，服务端 sidecar 记录，刷新后重建一览
+  var nxt = DELIV_ST[(DELIV_ST.indexOf(cur) + 1) % DELIV_ST.length];
+  postJSON("/api/delivery", { name: name, st: nxt }).then(function () { showStats(); })
+    .catch(function () { toast("状态保存失败：本地服务可能没在运行"); });
+}
+function showStats() { // 投递一览（R32）：副本名解析 日期/公司/岗位，配服务端 savedAt/exportedAt 给导出状态；投递状态胶囊点击推进（R33）；点行跳转
   closeModal();
   getJSON("/api/list").then(function (r) {
     var meta = r.meta || {};
+    var dlv = r.delivery || {};
     var rows = (r.docs || []).filter(function (n) { return n !== "主简历"; }).map(function (n) {
       var short = n.replace(/^jobs\//, "");
       var parts = short.split("_");
@@ -268,21 +275,33 @@ function showStats() { // 投递一览（R32）：副本名解析 日期/公司/
       if (m.exportedAt && m.savedAt && m.savedAt > m.exportedAt) { st = "改过未重导"; cls = "warn"; }
       else if (m.exportedAt) { st = "已导出"; cls = "ok"; }
       else { st = "未导出"; cls = "none"; }
+      var dv = dlv[n] || {};
+      var di = Math.max(0, DELIV_ST.indexOf(dv.st || "未投"));
       return "<tr class='stats-row' data-doc=\"" + esc(n) + "\"><td>" + esc(date) + "</td><td>" + esc(company) +
         "</td><td>" + esc(role) + "</td><td><span class='stats-dot " + cls + "'></span>" + st +
-        "</td><td class='stats-time'>" + esc((m.exportedAt || "").replace("T", " ").slice(0, 16) || "—") + "</td></tr>";
+        "</td><td class='stats-time'>" + esc((m.exportedAt || "").replace("T", " ").slice(0, 16) || "—") +
+        "</td><td><button class='deliv-pill d" + di + "' data-dv=\"" + esc(n) +
+        "\" title=\"点击推进到「" + DELIV_ST[(di + 1) % DELIV_ST.length] + "」\">" + esc(dv.st || "未投") + "</button></td></tr>";
     }).join("");
+    var counts = DELIV_ST.slice(1).map(function (s) {
+      var c = 0;
+      Object.keys(dlv).forEach(function (k) { if ((dlv[k] || {}).st === s) c++; });
+      return c ? s + " " + c : "";
+    }).filter(Boolean).join(" · ");
     var ov = document.createElement("div");
     ov.className = "modal-ov"; ov.id = "modal";
     ov.innerHTML = "<div class='modal'><div class='m-title'>📊 投递一览</div>" +
-      (rows ? "<table class='stats-table'><thead><tr><th>日期</th><th>公司</th><th>岗位</th><th>导出状态</th><th>导出时间</th></tr></thead><tbody>" +
-        rows + "</tbody></table><p class='ob-tip'>点行跳到对应副本；「改过未重导」= 导出后又编辑过，建议重新导出（主简历不计入投递）</p>" :
+      (rows ? "<table class='stats-table'><thead><tr><th>日期</th><th>公司</th><th>岗位</th><th>导出状态</th><th>导出时间</th><th>投递状态</th></tr></thead><tbody>" +
+        rows + "</tbody></table><p class='ob-tip'>点行跳到对应副本，点状态胶囊推进投递进度（未投→已投→面试→通过→挂）；「改过未重导」= 导出后又编辑过，建议重新导出（主简历不计入投递）" +
+        (counts ? "。进度：" + counts : "") + "</p>" :
         "<div class='ai-empty'>还没有岗位副本。左侧「＋新建岗位副本」创建后，这里会汇总各份的导出状态</div>") +
       "<div class='m-row'><button class='btn' data-m='no'>关闭</button></div></div>";
     document.body.appendChild(ov);
     ov.addEventListener("click", function (e) {
       var a = e.target.getAttribute && e.target.getAttribute("data-m");
       if (e.target === ov || a === "no") { ov.remove(); return; }
+      var pill = e.target.closest && e.target.closest(".deliv-pill");
+      if (pill) { cycleDeliv(pill.getAttribute("data-dv"), pill.textContent); return; } // 胶囊优先于行跳转
       var tr = e.target.closest && e.target.closest(".stats-row");
       if (tr) { ov.remove(); switchDoc(tr.getAttribute("data-doc")); }
     });
