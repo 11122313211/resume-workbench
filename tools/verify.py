@@ -376,6 +376,13 @@ def sec_static():
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
         "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
 
+    rd = read_text(ROOT / "README.md")
+    marks = ["Alt+↑↓", "Ctrl+S", "Ctrl+E", "Ctrl+J", "交付体检", "历史备份", "导出状态点",
+             "主简历漂移提示", "✎ 改名", "🤖", "T 取舍模式", "1-9"]
+    miss = [x for x in marks if x not in rd]
+    add("STATIC", "README 手册契约", "PASS" if not miss else "FAIL",
+        "键位表与功能入口描述全部在位（手册=实现）" if not miss else "缺: " + ",".join(miss))
+
 
 # ---------------------------------------------------------------- 第 2 节 API
 def get_doc(full):
