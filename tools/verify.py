@@ -314,9 +314,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=19" in page and "editor.css?v=17" in page
+    ok = "editor.js?v=20" in page and "editor.css?v=17" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=19 与 editor.css?v=17" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=20 与 editor.css?v=17" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -895,6 +895,22 @@ var CASES = {
     log("aikeys/apply", true, "键盘 1 应用第一条建议成功");
   },
 
+  "paste-img": async function () {   /* 剪贴板粘贴图片：合成 paste 事件 → 自动上传 → 照片字段落位 */
+    await loadEditor(DOC);
+    await wwait(function () { return q("#cards .card"); }, 8000, "编辑器渲染");
+    var b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    var bin = atob(b64), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    var dt = new DataTransfer();
+    dt.items.add(new File([arr], "clip.png", { type: "image/png" }));
+    idoc().dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
+    await wwait(function () {
+      var inp = q("#cards input[data-f='照片']");
+      return inp && inp.value.indexOf("photo-") === 0;
+    }, 9000, "照片字段填充 photo-*");
+    log("paste-img/done", true, "粘贴图片自动上传并落到照片字段");
+  },
+
   menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
     await loadEditor(DOC);
     function visSec() {
@@ -1131,7 +1147,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1140,7 +1156,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1257,6 +1273,12 @@ def sec_headless():
             headless_case("aikeys", prepare=prep_keys, doc=full_k, target=k1)
         except Exception as e:
             add("HEADLESS", "aikeys", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_pi, _ids_pi = make_copy("-pi")
+            headless_case("paste-img", doc=full_pi)
+        except Exception as e:
+            add("HEADLESS", "paste-img", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

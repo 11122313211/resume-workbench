@@ -1114,6 +1114,40 @@ function bindEvents() {
   /* 加粗按压态跟踪：光标/选区在 ** 内时点亮该行 B 按钮 */
   document.addEventListener("selectionchange", syncBoldState);
 
+/* ---------- 剪贴板粘贴图片：直接上传为简历照片（与「📂 选择」共用上传端点与照片落位） ---------- */
+document.addEventListener("paste", function (e) {
+  if (!state.doc) return;
+  var items = (e.clipboardData || {}).items;
+  if (!items) return;
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
+      var f = it.getAsFile();
+      if (!f) continue;
+      var ext = (it.type.split("/")[1] || "png").toLowerCase();
+      if (ext === "jpeg") ext = "jpg";
+      e.preventDefault();
+      uploadPhotoBlob(f, "." + ext);
+      return;
+    }
+  }
+});
+function uploadPhotoBlob(blob, ext) {
+  fetch("/api/upload-photo?ext=" + encodeURIComponent(ext), { method: "POST", body: blob })
+    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (!r.ok) { toast("照片上传失败：" + (r.error || "未知错误")); return; }
+      var prev = state.doc.meta["照片"] || "";
+      state.doc.meta["照片"] = r.name;
+      renderCards();
+      afterChange(false, true);
+      toast("已导入剪贴板照片 " + r.name, 8000, { label: "撤销", fn: function () {
+        state.doc.meta["照片"] = prev; renderCards(); afterChange(false, true);
+      } });
+    })
+    .catch(function () { toast("照片上传失败：本地服务可能没在运行"); });
+}
+
   /* 全局快捷键：Ctrl+S 保存 / Ctrl+Z·Y 撤销重做 / Ctrl+E 导出 / Ctrl+B 加粗切换 / Ctrl+J AI 助手 / T 取舍模式 / ? 引导 / Esc 关弹层 */
   document.addEventListener("keydown", function (e) {
     var k = (e.key || "").toLowerCase();
