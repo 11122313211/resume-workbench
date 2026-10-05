@@ -253,6 +253,42 @@ function lintDoc(doc) {
   });
   return issues;
 }
+function showStats() { // 投递一览（R32）：副本名解析 日期/公司/岗位，配服务端 savedAt/exportedAt 给导出状态；点行跳转
+  closeModal();
+  getJSON("/api/list").then(function (r) {
+    var meta = r.meta || {};
+    var rows = (r.docs || []).filter(function (n) { return n !== "主简历"; }).map(function (n) {
+      var short = n.replace(/^jobs\//, "");
+      var parts = short.split("_");
+      var date = /^\d{4}-\d{2}-\d{2}$/.test(parts[0] || "") ? parts[0] : "—";
+      var company = parts[1] || "—";
+      var role = parts.slice(2).join("_") || "—";
+      var m = meta[n] || {};
+      var st, cls;
+      if (m.exportedAt && m.savedAt && m.savedAt > m.exportedAt) { st = "改过未重导"; cls = "warn"; }
+      else if (m.exportedAt) { st = "已导出"; cls = "ok"; }
+      else { st = "未导出"; cls = "none"; }
+      return "<tr class='stats-row' data-doc=\"" + esc(n) + "\"><td>" + esc(date) + "</td><td>" + esc(company) +
+        "</td><td>" + esc(role) + "</td><td><span class='stats-dot " + cls + "'></span>" + st +
+        "</td><td class='stats-time'>" + esc((m.exportedAt || "").replace("T", " ").slice(0, 16) || "—") + "</td></tr>";
+    }).join("");
+    var ov = document.createElement("div");
+    ov.className = "modal-ov"; ov.id = "modal";
+    ov.innerHTML = "<div class='modal'><div class='m-title'>📊 投递一览</div>" +
+      (rows ? "<table class='stats-table'><thead><tr><th>日期</th><th>公司</th><th>岗位</th><th>导出状态</th><th>导出时间</th></tr></thead><tbody>" +
+        rows + "</tbody></table><p class='ob-tip'>点行跳到对应副本；「改过未重导」= 导出后又编辑过，建议重新导出（主简历不计入投递）</p>" :
+        "<div class='ai-empty'>还没有岗位副本。左侧「＋新建岗位副本」创建后，这里会汇总各份的导出状态</div>") +
+      "<div class='m-row'><button class='btn' data-m='no'>关闭</button></div></div>";
+    document.body.appendChild(ov);
+    ov.addEventListener("click", function (e) {
+      var a = e.target.getAttribute && e.target.getAttribute("data-m");
+      if (e.target === ov || a === "no") { ov.remove(); return; }
+      var tr = e.target.closest && e.target.closest(".stats-row");
+      if (tr) { ov.remove(); switchDoc(tr.getAttribute("data-doc")); }
+    });
+  }).catch(function () { toast("读取投递状态失败：本地服务可能没在运行"); });
+}
+
 function showLintModal(issues, onExport) { // 体检清单 → 用户拍板：取消导出 / 仍要导出（不阻断，只提示）
   closeModal();
   var ov = document.createElement("div");
@@ -1186,6 +1222,7 @@ function bindEvents() {
     else if (nav === "save") saveNow();
     else if (nav === "undo") undo();
     else if (nav === "redo") redo();
+    else if (nav === "stats") showStats();
     else if (nav === "export") exportNow(b);
     else if (nav === "help") showOnboard(true);
     else if (nav === "pin") {
