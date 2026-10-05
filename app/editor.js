@@ -271,6 +271,14 @@ function showLintModal(issues, onExport) { // 体检清单 → 用户拍板：�
     else if (a === "ok") { ov.remove(); onExport(); }
   });
 }
+function showPhotoZoom(src) { // 预览照片放大：点任意处或 Esc 关闭（查看类弹层，无按钮）
+  closeModal();
+  var ov = document.createElement("div");
+  ov.className = "modal-ov photo-zoom"; ov.id = "modal";
+  ov.innerHTML = "<img class='photo-zoom-img' src=\"" + esc(src) + "\" alt='照片放大查看'>";
+  document.body.appendChild(ov);
+  ov.addEventListener("click", function () { ov.remove(); });
+}
 /* ---------- 取舍模式（键盘流 triage：t 进入 · j/k 移动 · h 隐藏/恢复 · Esc/t 退出） ---------- */
 var triageIds = [];    // 可导航行 id（DOM 序，含已隐藏压缩行，h 可恢复）
 var triageIdx = -1;    // -1 = 未进入
@@ -1010,6 +1018,7 @@ function bindEvents() {
   frame.addEventListener("load", function () { iframeReady = true; pushPreview(); });  window.addEventListener("message", function (ev) {
     var d = ev.data || {};
     if (d.type === "locate" && d.id) { locateCard(d.id); return; }
+    if (d.type === "photoZoom" && d.src) { showPhotoZoom(d.src); return; } // 预览里点照片：放大查看
     if (d.type !== "vui-gauge") return;
     state.gauge = d;
     var p = document.getElementById("gauge-pages"), f = document.getElementById("gauge-fill");

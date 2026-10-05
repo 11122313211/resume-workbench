@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=28" in page and "editor.css?v=25" in page
+    ok = "editor.js?v=29" in page and "editor.css?v=26" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=28 与 editor.css?v=25" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=29 与 editor.css?v=26" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -370,7 +370,7 @@ def sec_static():
 
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
-               "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "T 取舍模式（j/k 移动"]
+               "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "showPhotoZoom", "T 取舍模式（j/k 移动"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
         "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
@@ -1089,6 +1089,19 @@ var CASES = {
     log("expmark2/amber", true, "改动保存后 → 琥珀点（导出后有改动）");
   },
 
+  "photozoom": async function () {  /* 预览照片点击 → 放大弹层 → 点击关闭（查看类，无按钮） */
+    await loadEditor(DOC);
+    var ph = await wwait(function () {
+      return idoc().getElementById("preview").contentDocument.querySelector("img.photo");
+    }, 12000, "预览中出现照片");
+    ph.click();
+    var big = await wwait(function () { return q(".photo-zoom-img"); }, 6000, "放大弹层出现");
+    log("photozoom/open", !!big, "点预览照片出现放大层");
+    big.click();
+    await wwait(function () { return !q(".photo-zoom-img"); }, 6000, "点击关闭放大层");
+    log("photozoom/close", true, "再点任意处关闭");
+  },
+
   "lint": async function () {  /* 交付体检：占位内容副本 → 导出弹出体检清单 → 取消导出不落地 */
     await loadEditor(DOC);
     clickEl("[data-nav='export']");
@@ -1374,7 +1387,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "backup", "rename"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "backup", "rename"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1383,7 +1396,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "backup", "rename"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "backup", "rename"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1551,6 +1564,12 @@ def sec_headless():
             headless_case("expmark2", prepare=prep_x2, doc=full_x2)
         except Exception as e:
             add("HEADLESS", "expmark2", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_ph, _ids_ph = make_copy("-ph")
+            headless_case("photozoom", doc=full_ph)
+        except Exception as e:
+            add("HEADLESS", "photozoom", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_li, _ids_li = make_copy("-li")

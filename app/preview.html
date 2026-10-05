@@ -225,9 +225,13 @@ window.addEventListener("message", function (ev) {
   if (ev.data && ev.data.type === "render" && ev.data.doc) { render(ev.data.doc); }
 });
 
-/* 点预览内容 -> 让编辑器定位左侧对应卡片 */
+/* 点预览内容 -> 让编辑器定位左侧对应卡片；点照片 -> 放大查看 */
 paper.addEventListener("click", function (ev) {
   if (printMode) return;
+  if (ev.target.classList && ev.target.classList.contains("photo")) {
+    try { window.parent.postMessage({ type: "photoZoom", src: ev.target.src }, "*"); } catch (e) {}
+    return;
+  }
   var n = ev.target.closest ? ev.target.closest("[data-id]") : null;
   if (!n) return;
   try { window.parent.postMessage({ type: "locate", id: n.getAttribute("data-id") }, "*"); } catch (e) {}
