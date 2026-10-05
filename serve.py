@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 import webbrowser
+from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -139,7 +140,16 @@ class Handler(SimpleHTTPRequestHandler):
                 docs = ["主简历"] + sorted(
                     "jobs/" + p.stem for p in JOBS.glob("*.json") if not p.name.startswith(".")
                 ) if JOBS.is_dir() else ["主简历"]
-                return self._json({"ok": True, "docs": docs})
+                # 导出状态可见性（R24）：savedAt/exportedAt 均为服务端时钟，客户端只做字符串比较
+                meta = {}
+                for n in docs:
+                    try:
+                        m = read_doc(n).get("meta") or {}
+                    except Exception:
+                        continue
+                    if m.get("exportedAt") or m.get("savedAt"):
+                        meta[n] = {"exportedAt": m.get("exportedAt"), "savedAt": m.get("savedAt")}
+                return self._json({"ok": True, "docs": docs, "meta": meta})
 
             if parsed.path == "/api/doc":
                 name = parse_qs(parsed.query).get("name", [""])[0]
@@ -200,6 +210,17 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._upload_photo(parsed)
             body = self._body()
             if parsed.path == "/api/save":
+                if isinstance(body.get("doc"), dict):
+                    d = body["doc"]
+                    try:
+                        prev_meta = read_doc(body["name"]).get("meta") or {}
+                    except Exception:
+                        prev_meta = {}
+                    m = d.setdefault("meta", {})
+                    # exportedAt 由服务端独占保管：客户端内存里的 doc 可能不含它，保存不能抹掉导出记录
+                    if not m.get("exportedAt") and prev_meta.get("exportedAt"):
+                        m["exportedAt"] = prev_meta["exportedAt"]
+                    m["savedAt"] = datetime.now().isoformat(timespec="seconds")
                 write_doc(body["name"], body["doc"])
                 return self._json({"ok": True})
 
@@ -248,6 +269,10 @@ class Handler(SimpleHTTPRequestHandler):
                 master["kind"] = "job"
                 master["name"] = safe
                 master["job"] = master.get("job") or {"jdText": "", "notes": ""}
+                m = master.get("meta")
+                if isinstance(m, dict):  # 新副本从未保存/导出：清掉从主简历继承的状态戳
+                    m.pop("savedAt", None)
+                    m.pop("exportedAt", None)
                 master.setdefault("meta", {})
                 write_doc(safe, master)
                 return self._json({"ok": True, "name": safe})
@@ -263,6 +288,12 @@ class Handler(SimpleHTTPRequestHandler):
                 out = (JOBS if name != "主简历" else DATA) / (stem + ".pdf")
                 out.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(printer.EXPORT_PDF, out)
+                # 导出状态戳：exportedAt=本次导出时间，savedAt 对齐同一秒，避免跨秒误报「有改动」
+                now = datetime.now().isoformat(timespec="seconds")
+                doc = read_doc(name)
+                doc.setdefault("meta", {})["exportedAt"] = now
+                doc["meta"]["savedAt"] = now
+                write_doc(name, doc)
                 return self._json({"ok": True, "pdf": "/data/" + (name + ".pdf" if name != "主简历" else "主简历.pdf"),
                                    "pages_hint": doc.get("kind")})
 

@@ -65,13 +65,20 @@ python tools/verify.py
 
 1. **STATIC**：serve.py 可编译、资源版本参数一致、加粗算法两边同源、数据文件可解析；
 2. **API**：列表/新建副本/保存回读与自动留底/删除/主简历禁删/AI 请求写入与旧建议归档/**导出 E2E（真实 Edge 打印 → %PDF 头 + A4 MediaBox）**/**照片上传与扩展名白名单**；
-3. **HEADLESS UI**（Edge `--dump-dom` + 驱动页）：新建副本全链路、副本改名、加粗切换、AI 建议应用/全部应用/撤销、错文档与坏格式诚实报错、发起-等待-取消状态机、⋯ 菜单与隐藏压缩、保存反馈就地化。
+3. **HEADLESS UI**（Edge `--dump-dom` + 驱动页）：新建副本全链路、副本改名、导出状态点三态、加粗切换、AI 建议应用/全部应用/撤销、建议就绪徽标、错文档与坏格式诚实报错、发起-等待-取消状态机、⋯ 菜单与隐藏压缩、保存反馈就地化。
 
 何时跑：任何 `app/` 或 `serve.py` 改动之后、提交之前。注意事项：verify 会用 `verify-tmp-*` / `verify-ui-*` 前缀的一次性副本做实验并在结束时清理，用户的 `ai-request.json` / `ai-suggestion.json` 会字节级备份还原；本次运行新增的 `ai-history` 归档与 `.backup` 备份也会被清理，用户自己的不动。
 
 **提交闸门（机制强制，两道按序）**：`tools/hooks/pre-commit` 经 `git config core.hooksPath tools/hooks` 启用——① **隐私闸门**：暂存区含 `data/` 变更即拒绝（真实简历数据绝不入库；`VERIFY_ALLOW_DATA=1` 为维护者显式放行）；② **静态门禁**：`python tools/verify.py --static`（秒级，STATIC 层：可编译/版本联动/算法同源/数据可解析）——静态契约不过，提交被阻止。动态三层（API/无头 UI）仍需提交前人工全量运行。临时绕过：`git commit --no-verify`。快速验证某次改动：`python tools/verify.py --static`。
 
 ## 5. 迭代记录
+
+### R24 · 2026-10-05 · 导出状态可见性：侧栏绿/琥珀点，杜绝「改过没重导」投旧 PDF
+
+- **提出**：导出的 PDF 落在 jobs/ 后就与编辑状态脱钩——改完内容忘重导、拿着旧 PDF 投递是高代价事故；侧栏看不出哪份是最新版。
+- **开发**：① 服务端独占时间戳：/api/save 盖 `meta.savedAt`、/api/export 盖 `meta.exportedAt`（同秒对齐防跨秒误报），/api/list 随名单返回 meta；② 侧栏文档行图标角上常驻状态点：绿=已导出最新，琥珀=导出后有改动（悬停见说明），从未导出无点；③ 保存/导出成功后轻刷新侧栏（refreshRailMeta）；④ /api/newjob 清掉从主简历继承的戳；**保存端点合并保留 exportedAt**——首轮 HEADLESS 抓到真 bug：客户端用内存 doc 保存会抹掉服务端导出戳，琥珀状态永远不出现。
+- **验证**：全量 39 项全绿：API 导出 E2E 扩展为「无戳→绿→琥珀」三态断言；新增 HEADLESS `expmark` 真点导出按钮走客户端刷新链路（绿点→改动→琥珀点）。中途 2 项失败（fresh 顺序错 + 抹戳 bug）全部修复后转绿。
+- **结果**：「哪份 PDF 是最新的」一眼可判，导出戳由服务端独占、不可被客户端意外抹除。回滚：`git revert` 单提交。
 
 ### R23 · 2026-10-05 · 建议就绪全局提醒：🤖 呼吸圆点 + 全局常驻轮询
 

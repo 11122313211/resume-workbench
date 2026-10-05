@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=25" in page and "editor.css?v=22" in page
+    ok = "editor.js?v=26" in page and "editor.css?v=23" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=25 与 editor.css?v=22" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=26 与 editor.css?v=23" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -369,10 +369,11 @@ def sec_static():
         "全部文档 id 无缺失无重复" if not idbad else "异常文档: " + ",".join(idbad))
 
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
-               "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge", "T 取舍模式（j/k 移动"]
+               "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
+               "refreshRailMeta", "T 取舍模式（j/k 移动"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
-        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
+        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
 
 
 # ---------------------------------------------------------------- 第 2 节 API
@@ -506,6 +507,12 @@ def sec_api(server_ok):
     try:
         st, body = http_req("POST", "/api/newjob", {"name": exp_name})
         made = st == 200 and tryjson(body).get("ok") is True
+        # R24 fresh 检查必须在导出前：新副本不应带任何状态戳
+        def list_meta(nm):
+            stl, bl = http_req("GET", "/api/list", timeout=10)
+            return (tryjson(bl).get("meta") or {}).get(nm) or {}
+        m0 = list_meta(exp_full)
+        fresh_ok = not m0.get("exportedAt") and not m0.get("savedAt")
         st2, body2 = http_req("POST", "/api/export", {"name": exp_full}, timeout=150)
         r2 = tryjson(body2)
         pdf_ok = pdf_path.is_file() and pdf_path.stat().st_size > 1024
@@ -519,9 +526,19 @@ def sec_api(server_ok):
                 h = float(m.group(4)) - float(m.group(2))
                 a4_ok = 593 <= w <= 597 and 840 <= h <= 844  # A4=595×842pt（210×297mm）
         allok = made and st2 == 200 and r2.get("ok") is True and pdf_ok and head_ok and a4_ok
+        # R24 导出状态可见性：导出后 exportedAt=绿 → 再保存 savedAt>exportedAt=琥珀（fresh 已在导出前检查）
+        m1 = list_meta(exp_full)
+        green_ok = bool(m1.get("exportedAt")) and (m1.get("savedAt") or "") <= m1["exportedAt"]
+        time.sleep(1.1)  # 跨过导出那一秒，确保 savedAt 严格大于 exportedAt
+        std, bd = get_doc(exp_full)
+        st3, _b3 = http_req("POST", "/api/save", {"name": exp_full, "doc": bd})
+        m2 = list_meta(exp_full)
+        amber_ok = st3 == 200 and bool(m2.get("savedAt")) and m2["savedAt"] > (m2.get("exportedAt") or "")
+        allok = allok and fresh_ok and green_ok and amber_ok
         add("API", "导出 E2E（A4 PDF）", "PASS" if allok else "FAIL",
-            "建副本=%s http=%s ok=%s pdf存在>1KB=%s %%PDF头=%s MediaBox=A4(%s) | %s"
-            % (made, st2, r2.get("ok"), pdf_ok, head_ok, a4_ok, str(r2.get("error", ""))[:60]))
+            "建副本=%s http=%s ok=%s pdf存在>1KB=%s %%PDF头=%s MediaBox=A4(%s) 状态戳[无=%s 绿=%s 琥珀=%s] | %s"
+            % (made, st2, r2.get("ok"), pdf_ok, head_ok, a4_ok, fresh_ok, green_ok, amber_ok,
+               str(r2.get("error", ""))[:60]))
     finally:
         restore(tgt, tgt_snap)
         try:
@@ -1011,6 +1028,31 @@ var CASES = {
     log("aibadge/clear", true, "打开面板即视为查看，徽标熄灭");
   },
 
+  "expmark": async function () {  /* 导出状态可见性：初始无状态点 → 真点导出按钮 → 绿点出现 → 改动后转琥珀（均限本副本行） */
+    await loadEditor(DOC);
+    function rowDot(cls) {
+      var b = q("#rail button[data-nav='doc'][data-doc='" + DOC + "']");
+      var row = b && b.closest(".rail-row");
+      return row ? row.querySelector(".rail-exp" + (cls ? "." + cls : "")) : null;
+    }
+    await wwait(function () { return q("#rail button[data-nav='doc'][data-doc='" + DOC + "']"); }, 8000, "侧栏渲染");
+    if (rowDot()) throw new Error("导出前不应有状态点");
+    log("expmark/fresh", true, "新副本无导出状态点（其他文档的点不受干扰）");
+    clickEl("[data-nav='export']");
+    await wwait(function () {  /* 岗位超页会先弹确认：两条路都接受 */
+      if (rowDot("ok")) return rowDot("ok");
+      var m = idoc().getElementById("modal");
+      if (m) { var ok = m.querySelector("[data-m='ok']"); if (ok) ok.click(); }
+      return null;
+    }, 40000, "导出后绿点出现");
+    log("expmark/green", true, "导出成功 → 侧栏绿点（已导出最新）");
+    var ta = await wwait(function () { return q("#cards textarea[data-id]"); }, 8000, "首个文本框");
+    ta.value = "【验证】导出后改动文本XYZ";
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () { return rowDot("stale"); }, 20000, "保存后琥珀点出现");
+    log("expmark/amber", true, "改动保存后 → 琥珀点（导出后有改动）");
+  },
+
   "rename": async function () {   /* 副本重命名：✎ → 弹窗输入新名 → 侧栏出现新名 */
     await loadEditor(DOC);
     await wwait(function () {
@@ -1261,7 +1303,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "rename"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "rename"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1270,7 +1312,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "rename"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "rename"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1417,6 +1459,12 @@ def sec_headless():
             headless_case("rename", doc=full_rn)
         except Exception as e:
             add("HEADLESS", "rename", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_xp, _ids_xp = make_copy("-xp")
+            headless_case("expmark", doc=full_xp)
+        except Exception as e:
+            add("HEADLESS", "expmark", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_bg, _ids_bg = make_copy("-bg")

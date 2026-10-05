@@ -207,6 +207,7 @@ function findAny(id) {
 function loadList() {
   return getJSON("/api/list").then(function (r) {
     state.list = r.docs || [];
+    state.meta = r.meta || {}; // 各文档 savedAt/exportedAt（服务端时钟），驱动侧栏导出状态点
     renderRail();
     if (!state.name && state.list.length) { // 恢复上次编辑的文档（localStorage 记忆）
       var last = null;
@@ -216,6 +217,12 @@ function loadList() {
   }).catch(function (e) { // 启动时服务不可达：给明确指引（后续操作的失败由各自 catch 提示）
     if (!state.list.length) toast("无法连接本地服务：请双击「启动简历工作台.bat」启动后再刷新页面", 8000);
   });
+}
+function refreshRailMeta() { // 保存/导出后轻刷新侧栏状态点（只取 meta，不动文档）
+  getJSON("/api/list").then(function (r) {
+    state.meta = r.meta || {};
+    renderRail();
+  }).catch(function () {});
 }
 /* ---------- 取舍模式（键盘流 triage：t 进入 · j/k 移动 · h 隐藏/恢复 · Esc/t 退出） ---------- */
 var triageIds = [];    // 可导航行 id（DOM 序，含已隐藏压缩行，h 可恢复）
@@ -417,11 +424,20 @@ function renderRail() { // 文档列表平铺在侧栏「文档」组，当前�
   (state.list || []).forEach(function (n) {
     if (f && n.toLowerCase().indexOf(f) === -1) return;
     var job = n !== "主简历", active = n === state.name;
+    var m = (state.meta || {})[n] || {}; // 导出状态：绿=已导出最新，琥珀=导出后有改动（R24）
+    var exp = "";
+    if (m.exportedAt) {
+      var stale = !!(m.savedAt && m.savedAt > m.exportedAt);
+      exp = "<span class='rail-exp" + (stale ? " stale" : " ok") + "' title='" +
+            (stale ? "导出后内容有改动，PDF 还是旧版——重新导出即可" : "已导出 PDF（" + esc(m.exportedAt.replace("T", " ")) + "）") +
+            "' aria-label='" + (stale ? "有改动未重新导出" : "已导出") + "'></span>";
+    }
     rows += "<div class='rail-row" + (active ? " active" : "") + "'>" +
          "<button class='rail-item" + (active ? " active" : "") + "' data-nav='doc' data-doc=\"" + esc(n) +
          "\" title=\"" + esc(n) + "\"" + (active ? " aria-current='true'" : "") + ">" +
          "<span class='ric'>" + (job ? SVG_TARGET : SVG_DOC) + "</span>" +
          "<span class='con'>" + esc(job ? n.replace(/^jobs\//, "") : "主简历") + "</span></button>" +
+         exp +
          (job ? "<button class='rail-ren' data-nav='rendoc' data-doc=\"" + esc(n) +
                "\" title='重命名此岗位副本' aria-label='重命名 " + esc(n) + "'>" + SVG_REN + "</button>" : "") +
          (job ? "<button class='rail-del' data-nav='deldoc' data-doc=\"" + esc(n) +
@@ -738,7 +754,7 @@ function saveFailToast() {
 function doSave(name, doc) {
   setSaveState("✎ 修改中…", "busy");
   return postJSON("/api/save", { name: name, doc: doc }).then(function (r) {
-    if (r.ok) flashOk("✓ 已保存");
+    if (r.ok) { flashOk("✓ 已保存"); refreshRailMeta(); } // savedAt 变化 → 侧栏状态点即时转琥珀
     else { setSaveState("⚠ 保存失败", "warn"); saveFailToast(); }
   }).catch(function () {
     setSaveState("⚠ 保存失败", "warn"); saveFailToast();
@@ -971,7 +987,7 @@ function bindEvents() {
       }).then(function (r) {
         if (navBtn) navBtn.disabled = false;
         flashOk("✓ 已保存");
-        if (r.ok) { toast("PDF 已导出：" + r.pdf); window.open(r.pdf, "_blank"); }
+        if (r.ok) { toast("PDF 已导出：" + r.pdf); window.open(r.pdf, "_blank"); refreshRailMeta(); }
         else toast("导出失败：" + (r.error || "未知错误"));
       }).catch(function (e) { if (navBtn) navBtn.disabled = false; setSaveState("就绪"); toast("导出失败：" + e.message); });
     }

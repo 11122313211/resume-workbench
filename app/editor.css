@@ -69,6 +69,10 @@ body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
 .rail-del svg { width: 13px; height: 13px; display: block; }
 #rail:hover .rail-row:hover .rail-del, #rail:focus-within .rail-row:hover .rail-del, #rail.pinned .rail-row:hover .rail-del { opacity: 1; }
 .rail-del:hover { background: #fdeaea; color: #a12626; }
+.rail-exp { position: absolute; left: 31px; top: 8px; width: 7px; height: 7px; border-radius: 50%;
+            z-index: 2; cursor: help; }
+.rail-exp.ok { background: #1a9c63; box-shadow: 0 0 0 2px rgba(26,156,99,.15); }
+.rail-exp.stale { background: #e8a23c; box-shadow: 0 0 0 2px rgba(232,162,60,.18); }
 .rail-ren { position: absolute; right: 32px; top: 50%; transform: translateY(-50%);
             border: 0; background: transparent; color: #aab2bd; cursor: pointer;
             width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
