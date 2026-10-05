@@ -10,7 +10,7 @@
 
 1. **零第三方依赖**：服务端只有 Python 标准库（`serve.py` / `tools/printer.py`）；前端只有原生 JS/CSS。vendored 文件仅 `app/vendor/Sortable.min.js` 一个。
 2. **全部本地**：服务只绑定 `127.0.0.1:8618`，无任何外呼、无遥测。
-3. **隐私红线**：真实个人信息不进 git —— `data/` 下用户简历文件的个人化改动**不提交不推送**（仓库中版本为虚构「张三」示例）。AI 协作只经本地文件交接，不直连大模型、无 API key。
+3. **隐私红线**：真实个人信息不进 git —— `data/` 下用户简历文件的个人化改动**不提交不推送**（仓库中版本为虚构「张三」示例）。AI 协作只经本地文件交接，不直连大模型、无 API key。**机制强制**：pre-commit 隐私闸门默认拒绝任何 `data/` 暂存变更（含中文路径引号转义坑，用 `-z` 列路径）；确要提交核验过的示例数据，用 `VERIFY_ALLOW_DATA=1` 显式放行（R11）。
 4. **人做决定**：AI 只产出建议文件（`data/ai-suggestion.json`）；应用与否、应用哪条，永远由用户在界面上点击决定，且全部可撤销。
 5. **交付物 = 与预览 1:1 的 A4 打印 PDF**：岗位版收敛 1 页，主简历可 2 页。
 
@@ -69,9 +69,16 @@ python tools/verify.py
 
 何时跑：任何 `app/` 或 `serve.py` 改动之后、提交之前。注意事项：verify 会用 `verify-tmp-*` / `verify-ui-*` 前缀的一次性副本做实验并在结束时清理，用户的 `ai-request.json` / `ai-suggestion.json` 会字节级备份还原；本次运行新增的 `ai-history` 归档与 `.backup` 备份也会被清理，用户自己的不动。
 
-**提交闸门（机制强制）**：`tools/hooks/pre-commit` 经 `git config core.hooksPath tools/hooks` 启用，每次提交自动执行 `python tools/verify.py --static`（秒级，STATIC 层：可编译/版本联动/算法同源/数据可解析）——静态契约不过，提交被阻止。动态三层（API/无头 UI）仍需提交前人工全量运行。临时绕过：`git commit --no-verify`。快速验证某次改动：`python tools/verify.py --static`。
+**提交闸门（机制强制，两道按序）**：`tools/hooks/pre-commit` 经 `git config core.hooksPath tools/hooks` 启用——① **隐私闸门**：暂存区含 `data/` 变更即拒绝（真实简历数据绝不入库；`VERIFY_ALLOW_DATA=1` 为维护者显式放行）；② **静态门禁**：`python tools/verify.py --static`（秒级，STATIC 层：可编译/版本联动/算法同源/数据可解析）——静态契约不过，提交被阻止。动态三层（API/无头 UI）仍需提交前人工全量运行。临时绕过：`git commit --no-verify`。快速验证某次改动：`python tools/verify.py --static`。
 
 ## 5. 迭代记录
+
+### R11 · 2026-10-05 · data/ 提交闸门（隐私铁律机制化）
+
+- **提出**（一次真实事故）：用户批量暂存（`git add -A`）把 `data/` 全部放进 index——主简历显示为「重命名删除」、三份岗位副本进暂存。经机械核验本次暂存内容无真实 PII（真实姓名 0、邮箱≠主简历真实邮箱、手机/证件号 0），纯属「先匿名化、后暂存」的顺序幸运；机制上没有任何东西阻止真实主简历被暂存并提交。铁律停留在流程约定，与 R6 之前「验证靠自觉」是同类缺口。附带发现：暂存内容与磁盘不一致（staged 是旧快照）——批量暂存 data/ 本身就会制造「提交内容≠工作区内容」的错觉。
+- **开发**：pre-commit 增加隐私闸门（在静态门禁之前）：`git diff --cached --name-only -z` 检测暂存区 `data/` 路径，默认拒绝并给出三条出路（撤销暂存 / `VERIFY_ALLOW_DATA=1` 维护者放行 / `--no-verify` 绕过整个钩子）。`.gitignore` 同步用户重写的隐私方案（`data/*` 全忽略 + 仅白名单三份已核验示例副本）。**首版闸门被实弹当场抓出 bug**：中文路径默认引号转义（`"data/\347..."`）导致行首 grep 漏判，改用 NUL 分隔修复——这正是「验证环节实弹化」的价值。
+- **验证**（全部实弹）：① 事故现场提交 → 被拒，HEAD 不动；② `-f` 强制暂存临时文件 → 被拒；③ `VERIFY_ALLOW_DATA=1` → 放行（static 4/4），临时提交随即 soft reset 回滚清理；④ 本轮自身提交走正常路径（无 data/ 暂存）通过闸门。核验过程只取计数/哈希/等值比较，不回显任何简历内容。
+- **结果**：泄漏路径从「靠自觉」变「机制默认拒绝」，白名单示例文件也必须显式放行才能提交（双保险）。用户本地 data/ 文件内容全程未动。回滚：`git revert` 单提交。
 
 ### R10 · 2026-10-04 · 保存自动留底（data/.backup 版本轮换）
 

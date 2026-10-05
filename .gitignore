@@ -4,11 +4,12 @@ __pycache__/
 .zcode/
 .zcodeignore
 tools/.build-work/
-data/照片*
-data/photo-*
-data/ai-request.json
-data/ai-suggestion.json
-data/.export-target.json
-data/jobs/*.pdf
-data/ai-history/
-data/.backup/
+# ── 隐私保护：真实简历数据一律不入 git（主简历/照片/PDF/AI记录/留底）──
+# 默认忽略 data/ 下所有内容；仅放行下方明确列出的测试用示例文件
+data/*
+# 测试用岗位副本（已核验：内容均为虚构示例“张三”，无真实个人信息）
+!data/jobs/
+data/jobs/*
+!data/jobs/2026-XX-XX_公司_岗位.json
+!data/jobs/2026-XX-XX_公司位.json
+!data/jobs/226-XX-XX_公司_岗位.json

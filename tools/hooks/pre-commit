@@ -1,7 +1,23 @@
 #!/bin/sh
-# 静态门禁：提交前强制执行 verify.py 的 STATIC 层（可编译/版本联动/算法同源/数据可解析，秒级）。
-# 完整三层验证（python tools/verify.py）仍是提交前的流程要求，见 PROJECT.md §3/§4。
-# 临时绕过：git commit --no-verify
+# 提交闸门（两道，按序执行）：
+# ① 隐私闸门：data/ 下的任何暂存变更默认拒绝——data/ 是真实简历数据
+#    （铁律：绝不提交、绝不推送；仓库白名单示例文件也必须显式确认后才能提交）。
+#    撤销暂存（文件内容不动）:  git restore --staged data/
+#    确要提交示例数据（维护者）:  VERIFY_ALLOW_DATA=1 git commit ...
+# ② 静态门禁：verify.py --static（可编译/版本联动/算法同源/数据可解析，秒级）。
+# 完整三层验证（python tools/verify.py）仍是提交前的流程要求，见 PROJECT.md §4。
+# 临时绕过整个钩子：git commit --no-verify
+if [ "${VERIFY_ALLOW_DATA:-}" != "1" ]; then
+  # -z + tr：中文路径默认会被引号转义（"data/\347..."），行首 grep 会漏判；NUL 分隔无此问题
+  if git diff --cached --name-only -z | tr '\0' '\n' | grep -q "^data/"; then
+    echo "" >&2
+    echo "[pre-commit] 提交被拒绝：暂存区包含 data/ 下的变更。" >&2
+    echo "  data/ 是你的个人简历数据，铁律：绝不提交、绝不推送。" >&2
+    echo "  撤销暂存（文件内容不动）:  git restore --staged data/" >&2
+    echo "  确要提交示例数据（维护者）:  VERIFY_ALLOW_DATA=1 git commit ..." >&2
+    exit 1
+  fi
+fi
 if ! command -v python >/dev/null 2>&1; then
   echo "[pre-commit] 未找到 python，本次跳过静态门禁（请确认 python 在 PATH 中）" >&2
   exit 0
