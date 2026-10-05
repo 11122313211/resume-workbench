@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=34" in page and "editor.css?v=30" in page
+    ok = "editor.js?v=35" in page and "editor.css?v=31" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=34 与 editor.css?v=30" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=35 与 editor.css?v=31" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -371,14 +371,14 @@ def sec_static():
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
                "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "showPhotoZoom",
-               "showStats", "cycleDeliv", "exportByName", "cycleDoc", "masterAt", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
+               "showStats", "cycleDeliv", "exportByName", "openFind", "cycleDoc", "masterAt", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
         "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
 
     rd = read_text(ROOT / "README.md")
     marks = ["Alt+↑↓", "Ctrl+S", "Ctrl+E", "Ctrl+J", "交付体检", "历史备份", "导出状态点",
-             "主简历漂移提示", "✎ 改名", "🤖", "T 取舍模式", "1-9", "投递一览", "投递状态", "一键导出"]
+             "主简历漂移提示", "✎ 改名", "🤖", "T 取舍模式", "1-9", "投递一览", "投递状态", "一键导出", "Ctrl+F"]
     miss = [x for x in marks if x not in rd]
     add("STATIC", "README 手册契约", "PASS" if not miss else "FAIL",
         "键位表与功能入口描述全部在位（手册=实现）" if not miss else "缺: " + ",".join(miss))
@@ -1149,6 +1149,31 @@ var CASES = {
     if (path === "lint") clickEl("#modal [data-m='no']");
   },
 
+  "find": async function () {    /* 文档内查找（R35）：Ctrl+F 打开 → 唯一命中计数 → 定位高亮 → Esc 关闭 */
+    await loadEditor(DOC);
+    await wwait(function () { return q("#cards .bullet-row textarea"); }, 8000, "卡片渲染");
+    var ta = q("#cards .bullet-row textarea");
+    ta.value = "动词开头验证查找目标Zq7x量化结果";
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+    await wwait(function () { return q("#find-bar.on #find-in"); }, 4000, "查找条打开");
+    var fi = q("#find-in");
+    fi.value = "Zq7x";
+    fi.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () { return q("#find-count").textContent.indexOf("1 处") !== -1; }, 4000, "唯一命中计数");
+    log("find/count", true, "唯一关键词命中 1 处");
+    q("#find-next").click();
+    await wwait(function () {
+      var c = q("#cards .bullet-row.find-cur");
+      return c && c.querySelector("textarea").value.indexOf("Zq7x") !== -1 &&
+             q("#find-count").textContent === "1/1";
+    }, 4000, "定位到命中行");
+    log("find/goto", true, "命中行高亮并计数 1/1");
+    fi.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await wwait(function () { return !q("#find-bar.on"); }, 4000, "Esc 关闭查找条");
+    log("find/close", true, "Esc 关闭查找条");
+  },
+
   "chipjump": async function () {   /* 「已隐藏 N」chip 点击：进取舍模式并定位第一个隐藏行 */
     await loadEditor(DOC);
     function press(key) {
@@ -1529,7 +1554,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1538,7 +1563,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1685,6 +1710,12 @@ def sec_headless():
             headless_case("statsexp", doc=full_se)
         except Exception as e:
             add("HEADLESS", "statsexp", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_fd, _ids_fd = make_copy("-fd")
+            headless_case("find", doc=full_fd)
+        except Exception as e:
+            add("HEADLESS", "find", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_cj, _ids_cj = make_copy("-cj")

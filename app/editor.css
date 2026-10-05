@@ -360,3 +360,13 @@ body.splitting { cursor: col-resize; user-select: none; }
 .stats-export { border: 1px solid #ccd3dc; background: #fff; border-radius: 6px; padding: 2px 8px;
   font-size: 11.5px; cursor: pointer; color: #445; white-space: nowrap; }
 .stats-export:hover { background: #f4f6fa; }
+/* ===== 文档内查找条（R35）：浏览器式右上角浮层，Esc 关闭 ===== */
+#find-bar { position: fixed; top: 14px; right: 16px; z-index: 80; display: none; align-items: center; gap: 6px;
+  background: #fff; border: 1px solid #d5dae2; border-radius: 10px; padding: 6px 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); }
+#find-bar.on { display: flex; }
+#find-bar input { width: 230px; border: 1px solid #e2e6ec; border-radius: 6px; padding: 4px 8px;
+  font: 12.5px/1.4 "Microsoft YaHei", sans-serif; color: #333; }
+#find-bar button { border: none; background: none; cursor: pointer; color: #66707e; font-size: 13px; padding: 2px 5px; }
+#find-bar button:hover { color: #222; }
+#find-count { font-size: 11.5px; color: #8892a0; min-width: 34px; text-align: center; white-space: nowrap; }
+#cards .find-cur { outline: 2px solid #f0b429; outline-offset: 1px; border-radius: 6px; }

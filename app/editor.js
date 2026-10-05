@@ -160,7 +160,7 @@ function showOnboard(force) {
     "<li><b>维护主简历</b>：左侧卡片增删改、拖拽排序，右侧 A4 实时预览，完整版可以是 2 页</li>" +
     "<li><b>投递取舍</b>：AI 助手里贴 JD、点「发起 AI 优化」（提示词自动复制）→ 到你的 AI agent 粘贴运行 → 回来建议自动出现，一键或逐条采纳</li>" +
     "<li><b>一键导出</b>：左侧导航「导出 PDF」得到与预览 1:1 的 A4 打印版</li>" +
-    "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· T 取舍模式（j/k 移动 · h 隐藏/恢复 · Esc 退出）· Alt+↑/↓ 切换文档 · 点右侧预览可定位左侧卡片 · AI 建议就绪时左侧 🤖 亮圆点，面板关着也不会错过 · ? 重看本引导</p>" +
+    "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· Ctrl+F 文档内查找（Enter 下一处）· T 取舍模式（j/k 移动 · h 隐藏/恢复 · Esc 退出）· Alt+↑/↓ 切换文档 · 点右侧预览可定位左侧卡片 · AI 建议就绪时左侧 🤖 亮圆点，面板关着也不会错过 · ? 重看本引导</p>" +
     "<div class='m-row'><button class='btn primary' data-m='ok'>开始使用</button></div></div>";
   document.body.appendChild(ov);
   ov.addEventListener("click", function (e) {
@@ -253,6 +253,89 @@ function lintDoc(doc) {
   });
   return issues;
 }
+/* ---------- 文档内查找（Ctrl+F，R35）：焦点常驻查找条，命中行高亮 + 滚动居中，折叠章节自动展开 ---------- */
+var findState = { q: "", hits: [], idx: -1 };
+function findOpen() { var b = document.getElementById("find-bar"); return !!(b && b.classList.contains("on")); }
+function findBar() { // 惰性创建：结构只建一次
+  var b = document.getElementById("find-bar");
+  if (b) return b;
+  b = document.createElement("div");
+  b.id = "find-bar";
+  b.innerHTML = "<input id='find-in' placeholder='在本文档内查找（章节 / 条目 / 成果）'>" +
+    "<span id='find-count'></span>" +
+    "<button id='find-prev' title='上一处（Shift+Enter）' aria-label='上一处'>↑</button>" +
+    "<button id='find-next' title='下一处（Enter）' aria-label='下一处'>↓</button>" +
+    "<button id='find-x' title='关闭（Esc）' aria-label='关闭查找'>✕</button>";
+  document.body.appendChild(b);
+  document.getElementById("find-in").addEventListener("input", function () { findScan(this.value); });
+  document.getElementById("find-in").addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { e.preventDefault(); closeFind(); return; }
+    if (e.key === "Enter") { e.preventDefault(); findGoto(e.shiftKey ? -1 : 1); return; }
+    e.stopPropagation(); // 查找条内按键不进全局分发
+  });
+  b.addEventListener("click", function (e) {
+    if (e.target.id === "find-next") findGoto(1);
+    else if (e.target.id === "find-prev") findGoto(-1);
+    else if (e.target.id === "find-x") closeFind();
+  });
+  return b;
+}
+function pushHits(k, id, secId, f, text, low) {
+  if (!text) return;
+  var t = String(text).toLowerCase(), i = 0;
+  while ((i = t.indexOf(low, i)) !== -1) { findState.hits.push({ k: k, id: id, secId: secId, f: f, at: i }); i += 1; }
+}
+function findScan(q) {
+  findState.q = q; findState.hits = []; findState.idx = -1;
+  var doc = state.doc;
+  if (q && doc) {
+    var low = q.toLowerCase();
+    (doc.sections || []).forEach(function (s) {
+      pushHits("section", s.id, s.id, "标题", s["标题"], low);
+      (s.entries || []).forEach(function (en) {
+        ["left", "right", "meta", "tags"].forEach(function (f) { pushHits("entry", en.id, s.id, f, en[f], low); });
+        (en.bullets || []).forEach(function (b) { pushHits("bullet", b.id, s.id, "text", b.text, low); });
+      });
+    });
+  }
+  updateFindCount();
+}
+function findGoto(dir) {
+  var hits = findState.hits;
+  if (!hits.length) { updateFindCount(); return; }
+  findState.idx = (findState.idx + (dir || 1) + hits.length) % hits.length;
+  var h = hits[findState.idx];
+  var row = document.querySelector('#cards [data-id="' + h.id + '"]');
+  if (!row || row.offsetParent === null) { // 命中在折叠章节内：先展开再定位
+    var fdoc = state.folded[state.name] || (state.folded[state.name] = {});
+    if (fdoc[h.secId]) { fdoc[h.secId] = false; saveFoldStore(); renderCards(); row = document.querySelector('#cards [data-id="' + h.id + '"]'); }
+  }
+  if (!row) return;
+  $$("#cards .find-cur").forEach(function (x) { x.classList.remove("find-cur"); });
+  row.classList.add("find-cur");
+  row.scrollIntoView({ block: "center" });
+  updateFindCount();
+}
+function updateFindCount() {
+  var el = document.getElementById("find-count");
+  if (!el) return;
+  var n = findState.hits.length;
+  el.textContent = !findState.q ? "" : !n ? "无" : findState.idx < 0 ? n + " 处" : (findState.idx + 1) + "/" + n;
+}
+function openFind() {
+  var b = findBar();
+  b.classList.add("on");
+  var inp = document.getElementById("find-in");
+  inp.focus(); inp.select();
+  findScan(inp.value); // 重开保留上次关键词并重新扫描（模型可能已变）
+}
+function closeFind() {
+  var b = document.getElementById("find-bar");
+  if (b) b.classList.remove("on");
+  $$("#cards .find-cur").forEach(function (x) { x.classList.remove("find-cur"); });
+  findState.idx = -1;
+}
+
 var DELIV_ST = ["未投", "已投", "面试", "通过", "挂"]; // 投递状态循环顺序（与 serve.py DELIV_ST 白名单一致）
 function cycleDeliv(name, cur) { // 投递状态跟踪（R33）：点胶囊循环推进，服务端 sidecar 记录，刷新后重建一览
   var nxt = DELIV_ST[(DELIV_ST.indexOf(cur) + 1) % DELIV_ST.length];
@@ -1426,11 +1509,12 @@ function uploadPhotoBlob(blob, ext) {
     .catch(function () { toast("照片上传失败：本地服务可能没在运行"); });
 }
 
-  /* 全局快捷键：Ctrl+S 保存 / Ctrl+Z·Y 撤销重做 / Ctrl+E 导出 / Ctrl+B 加粗切换 / Ctrl+J AI 助手 / T 取舍模式 / ? 引导 / Esc 关弹层 */
+  /* 全局快捷键：Ctrl+S 保存 / Ctrl+Z·Y 撤销重做 / Ctrl+E 导出 / Ctrl+B 加粗切换 / Ctrl+F 文档内查找 / Ctrl+J AI 助手 / T 取舍模式 / ? 引导 / Esc 关弹层 */
   document.addEventListener("keydown", function (e) {
     var k = (e.key || "").toLowerCase();
     if (k === "escape") {
-      if (document.getElementById("modal")) { closeModal(); return; } // Esc 只关最顶层：先弹窗，再操作菜单，再取舍模式，最后 AI 面板
+      if (document.getElementById("modal")) { closeModal(); return; } // Esc 只关最顶层：先弹窗，再查找条，再操作菜单，再取舍模式，最后 AI 面板
+      if (findOpen()) { closeFind(); return; }
       if (menuEl) { closeMenu(); return; }
       if (triageIdx >= 0) { triageExit(); return; }
       toggleAIPanel(false);
@@ -1467,6 +1551,7 @@ function uploadPhotoBlob(blob, ext) {
     else if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
     else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
     else if (k === "j") { e.preventDefault(); toggleAIPanel(); }
+    else if (k === "f") { e.preventDefault(); openFind(); } // 文档内查找（输入框聚焦时也可开，浏览器习惯）
     else if (k === "b" && e.target && e.target.tagName === "TEXTAREA") { e.preventDefault(); toggleBold(e.target); }
   });
 
