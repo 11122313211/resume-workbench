@@ -1041,6 +1041,19 @@ function bindEvents() {
     railFilter = this.value.trim();
     renderRail();
   });
+  document.getElementById("hidden-chip").addEventListener("click", function () { // 复查隐藏内容：一键进取舍并跳到第一个隐藏行
+    triageStart();
+    var firstHidden = -1;
+    triageIds.forEach(function (id, i) {
+      if (firstHidden >= 0) return;
+      var f0 = findAny(id);
+      if (f0 && f0.obj.hidden) firstHidden = i;
+    });
+    if (firstHidden >= 0) { triageIdx = firstHidden; triagePaint(); }
+  });
+  document.getElementById("hidden-chip").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.click(); }
+  });
   document.getElementById("rail-search").addEventListener("keydown", function (e) {
     if (e.key === "Escape") { e.stopPropagation(); this.value = ""; railFilter = ""; renderRail(); this.blur(); }
   });

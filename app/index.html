@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>简历可视化编辑工作台</title>
-<link rel="stylesheet" href="editor.css?v=19">
+<link rel="stylesheet" href="editor.css?v=20">
 </head>
 <body>
 <!-- 悬浮侧边导航：上区=身份与内容（当前文档/文档列表/新建/AI），下区=交付与元动作（导出/保存/引导/钉住/状态行）。
@@ -76,7 +76,7 @@
       <span id="gauge-pages" class="chip" title="按 A4 页高估算的页数">— 页</span>
       <span id="gauge-fill" class="chip" title="内容高度占版心比例；超过 100% 会溢出一页">—</span>
       <span id="chars" class="chip" title="未隐藏成果的总字数">成果字数 —</span>
-      <span id="hidden-chip" class="chip mid hidden" title="本次取舍已拿掉的内容块数；行尾琥珀眼睛或 ⋯ 菜单可恢复">已隐藏 0</span>
+      <span id="hidden-chip" class="chip mid hidden" role="button" tabindex="0" title="本次取舍已拿掉的内容块数；点击进入取舍模式并定位到第一个隐藏条目">已隐藏 0</span>
       <span class="spacer"></span>
       <span class="pv-hint">点预览内容可跳到左侧卡片</span>
       <select id="zoom-select" title="预览缩放">
@@ -115,6 +115,6 @@
 <div id="toast"></div>
 <input type="file" id="photo-file" accept="image/*" class="hidden">
 <script src="vendor/Sortable.min.js?v=6"></script>
-<script src="editor.js?v=22"></script>
+<script src="editor.js?v=23"></script>
 </body>
 </html>
