@@ -360,6 +360,12 @@ def sec_static():
     add("STATIC", "数据 id 唯一且非空", "PASS" if not idbad else "FAIL",
         "全部文档 id 无缺失无重复" if not idbad else "异常文档: " + ",".join(idbad))
 
+    anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
+               "updateTimeFmt", "railFilter", "T 取舍模式（j/k 移动"]
+    missing = [a for a in anchors if a not in js]
+    add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
+        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
+
 
 # ---------------------------------------------------------------- 第 2 节 API
 def get_doc(full):
