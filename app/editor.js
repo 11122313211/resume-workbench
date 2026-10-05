@@ -160,7 +160,7 @@ function showOnboard(force) {
     "<li><b>维护主简历</b>：左侧卡片增删改、拖拽排序，右侧 A4 实时预览，完整版可以是 2 页</li>" +
     "<li><b>投递取舍</b>：AI 助手里贴 JD、点「发起 AI 优化」（提示词自动复制）→ 到你的 AI agent 粘贴运行 → 回来建议自动出现，一键或逐条采纳</li>" +
     "<li><b>一键导出</b>：左侧导航「导出 PDF」得到与预览 1:1 的 A4 打印版</li>" +
-    "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· T 取舍模式（j/k 移动 · h 隐藏/恢复 · Esc 退出）· 点右侧预览可定位左侧卡片 · ? 重看本引导</p>" +
+    "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· T 取舍模式（j/k 移动 · h 隐藏/恢复 · Esc 退出）· 点右侧预览可定位左侧卡片 · AI 建议就绪时左侧 🤖 亮圆点，面板关着也不会错过 · ? 重看本引导</p>" +
     "<div class='m-row'><button class='btn primary' data-m='ok'>开始使用</button></div></div>";
   document.body.appendChild(ov);
   ov.addEventListener("click", function (e) {
@@ -1261,7 +1261,6 @@ function uploadPhotoBlob(blob, ext) {
     var btn = this;
     if (aiWaiting) { // 等待中再点 = 取消等待；提示词已在缓存，仍可点「复制提示词」手动复制
       endAIWait("发起 AI 优化");
-      stopAIPoll();
       toast("已取消等待");
       return;
     }
@@ -1283,7 +1282,6 @@ function uploadPhotoBlob(blob, ext) {
       document.getElementById("ai-copy").disabled = false;
       aiSig = null; // 让轮询能识别到"新文件/更新"
       setAIWaiting(true); // 按钮秒表 + 120s 超时兜底
-      if (!document.getElementById("ai-panel").classList.contains("ai-closed")) startAIPoll(); // 面板已关则不开轮询，重开时自动恢复
       loadSuggestions(); // 服务端已作废旧建议：立即刷新，不等下一次轮询
       if (!aiPromptCache) { toast("请求已写入 data/ai-request.json，但提示词为空——请重新发起", 8000); return; }
       copyText(aiPromptCache).then(function () { // 发起即自动复制（第②步零操作）
@@ -1330,6 +1328,7 @@ function uploadPhotoBlob(blob, ext) {
 
 /* ---------- AI 面板开关与自动轮询 ---------- */
 var aiPollTimer = null, aiSig = null, aiWaiting = false, aiWaitTO = null, aiJdFor = null; // aiJdFor=JD 输入框内容归属的文档
+var aiSeenSig = (function () { try { return localStorage.getItem("vui-ai-seen") || ""; } catch (e) { return ""; } })(); // 已看过的建议签名（跨刷新记忆）
 var aiPromptCache = null, aiSecTimer = null, aiReqBusy = false, aiHaveValidSug = false; // 提示词缓存/秒表/请求写入中/当前文档有可用建议
 function setAIWaiting(on) { // 等待态：1s 秒表更新按钮文案 + 120s 超时兜底
   aiWaiting = on;
@@ -1357,9 +1356,9 @@ function endAIWait(label) { // 解除等待并复位按钮文案；请求写入�
   var btn = document.getElementById("ai-request");
   if (btn && label) { btn.disabled = false; btn.textContent = label; }
 }
-function resetAIRequestState() { // 切文档/重置：等待、秒表、轮询、提示词缓存全部清空，一切干净
+function resetAIRequestState() { // 切文档/重置：等待、秒表、徽标、提示词缓存全部清空，一切干净
   setAIWaiting(false);
-  stopAIPoll();
+  setAIBadge(false); // 徽标归属当前文档：换文档先熄灭，下个轮询周期按新文档重评
   aiPromptCache = null;
   aiHaveValidSug = false;
   var rb = document.getElementById("ai-request");
@@ -1390,8 +1389,8 @@ function toggleAIPanel(open) {
     loadAIHistory(); // 历史建议归档列表：重新发起前的上一轮不丢，可只读回看
     updateAISteps();
     updateJdMarks(); // JD 随文档恢复后立即刷新命中徽标
-    startAIPoll(); // 面板开着就轮询（本地请求零成本），agent 何时写完都能自动出现
-  } else stopAIPoll();
+    setAIBadge(false); // 打开即视为查看：徽标熄灭（loadSuggestions 会记已读）
+  }
 }
 
 function loadAIHistory() { // 历史建议：服务端在每次发起时归档旧建议（保留最近 20 份）
@@ -1427,9 +1426,20 @@ function loadAIHistory() { // 历史建议：服务端在每次发起时归档�
     });
   }).catch(function () {}); // 历史列表失败不打扰：主流程的建议渲染有自己的报错
 }
-function stopAIPoll() { clearInterval(aiPollTimer); aiPollTimer = null; }
-function startAIPoll() { // 面板开启期间轮询建议文件（本地请求零成本），agent 写好后自动出现
-  stopAIPoll();
+function setAIBadge(on) { // AI 就绪徽标：当前文档有未查看的建议时，侧栏 🤖 亮圆点（面板关着也有感知）
+  var b = document.querySelector("[data-nav='ai']");
+  if (!b) return;
+  var d = b.querySelector(".ai-ready");
+  if (on && !d) { d = document.createElement("span"); d.className = "ai-ready"; d.title = "有新建议"; b.appendChild(d); }
+  else if (!on && d) d.remove();
+}
+function markAISeen() { // 建议已在面板里渲染给用户看过：记入 localStorage，重开页面不再重复提醒
+  if (!aiSig) return;
+  aiSeenSig = aiSig;
+  try { localStorage.setItem("vui-ai-seen", aiSig); } catch (e) {}
+}
+function startAIPoll() { // 全局常驻轮询（本地请求零成本）：面板开着就地渲染，关着亮徽标+toast——切走跑 agent 回来零点击感知
+  if (aiPollTimer) return;
   aiPollTimer = setInterval(function () {
     getJSON("/api/ai-suggestion").then(function (r) {
       var items = (r && r.items) || [];
@@ -1437,10 +1447,14 @@ function startAIPoll() { // 面板开启期间轮询建议文件（本地请求�
       var sig = arr.length + ":" + arr.map(function (it) {
         return it.type + "|" + (it.target || "") + "|" + (it.text || it.reason || "");
       }).join(";");
-      if (sig !== aiSig) {
-        loadSuggestions();
-        if (arr.length && r && r.for === state.name) toast("AI 建议已就绪 ✓");
-      }
+      if (sig === aiSig) return;
+      var open = !document.getElementById("ai-panel").classList.contains("ai-closed");
+      if (open) { loadSuggestions(); return; } // 就地渲染（内部对齐 aiSig 并记已读）
+      aiSig = sig; // 面板关着：只记账，打开面板时 loadSuggestions 会重新渲染
+      if (arr.length && r && r.for === state.name && sig !== aiSeenSig) {
+        setAIBadge(true);
+        toast("AI 建议已就绪 ✓（左侧 🤖 可查看）");
+      } else if (!arr.length || sig === aiSeenSig) setAIBadge(false);
     }).catch(function () {}); // 文件尚不存在：静默等待下一次轮询
   }, 2500);
 }
@@ -1517,6 +1531,7 @@ function loadSuggestions() {
     /* 有建议：解除等待态，渲染卡片 */
     aiHaveValidSug = true;
     endAIWait("发起 AI 优化");
+    markAISeen(); // 渲染给用户看了：记已读，徽标/提醒不再重复
     box.__items = arr;
     var applicable = arr.some(function (it, i) {
       return it && it.type !== "note" && !state.appliedAI[i] && findAny(it.target || "");
@@ -1578,5 +1593,6 @@ window.addEventListener("DOMContentLoaded", function () {
   state.folded = loadFoldStore(); // 折叠状态按文档记忆
   bindEvents();
   loadList();
+  startAIPoll(); // 全局常驻轮询：建议文件一变即有感知（面板开着渲染，关着亮徽标）
   showOnboard(false); // 首访三步引导（localStorage 记忆）
 });

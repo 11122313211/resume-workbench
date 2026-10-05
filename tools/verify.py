@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=24" in page and "editor.css?v=21" in page
+    ok = "editor.js?v=25" in page and "editor.css?v=22" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=24 与 editor.css?v=21" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=25 与 editor.css?v=22" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -369,10 +369,10 @@ def sec_static():
         "全部文档 id 无缺失无重复" if not idbad else "异常文档: " + ",".join(idbad))
 
     anchors = ["triageStart", "aiApply", "updateJdMarks", "normalizeIds", "uploadPhotoBlob",
-               "updateTimeFmt", "railFilter", "renameFlow", "T 取舍模式（j/k 移动"]
+               "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge", "T 取舍模式（j/k 移动"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
-        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
+        "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
 
 
 # ---------------------------------------------------------------- 第 2 节 API
@@ -1002,6 +1002,15 @@ var CASES = {
     log("chipjump/done", true, "chip 点击进入取舍模式并定位到隐藏行");
   },
 
+  "aibadge": async function () {  /* 建议就绪全局提醒：prepare 预先写好属于 DOC 的建议 → 面板关闭时侧栏 🤖 亮圆点 → 打开面板熄灭 */
+    await loadEditor(DOC); /* 面板默认关闭；全局轮询 2.5s 内应感知已就绪的建议 */
+    var dot = await wwait(function () { return q("[data-nav='ai'] .ai-ready"); }, 8000, "🤖 亮起 .ai-ready 徽标");
+    log("aibadge/dot", !!dot, "面板关闭时建议就绪 → 侧栏 🤖 亮圆点（无需开面板才发现）");
+    clickEl("[data-nav='ai']");
+    await wwait(function () { return !q("[data-nav='ai'] .ai-ready"); }, 6000, "打开面板后徽标熄灭");
+    log("aibadge/clear", true, "打开面板即视为查看，徽标熄灭");
+  },
+
   "rename": async function () {   /* 副本重命名：✎ → 弹窗输入新名 → 侧栏出现新名 */
     await loadEditor(DOC);
     await wwait(function () {
@@ -1252,7 +1261,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "rename"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "rename"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1261,7 +1270,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "rename"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "rename"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1408,6 +1417,18 @@ def sec_headless():
             headless_case("rename", doc=full_rn)
         except Exception as e:
             add("HEADLESS", "rename", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_bg, _ids_bg = make_copy("-bg")
+
+            def prep_bg():
+                make_copy("-bg")
+                # 建议在编辑器启动前就位：轮询首个周期就应点亮徽标（面板保持关闭）
+                write_suggestion({"for": full_bg, "items": [
+                    {"type": "note", "text": "【验证】建议就绪徽标"}]})
+            headless_case("aibadge", prepare=prep_bg, doc=full_bg)
+        except Exception as e:
+            add("HEADLESS", "aibadge", "FAIL", "准备失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

@@ -41,6 +41,11 @@ body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
              font-size: 13px; font-family: inherit; text-align: left; white-space: nowrap; position: relative; }
 .rail-item:hover { background: #eef1f5; }
 .rail-item:disabled { opacity: .5; cursor: default; }
+.ai-ready { position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            width: 8px; height: 8px; border-radius: 50%; background: #2f6fed;
+            box-shadow: 0 0 0 3px rgba(47,111,237,.16); animation: aiPulse 1.6s ease-in-out infinite; }
+@keyframes aiPulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+#rail.pinned .ai-ready { right: 14px; }
 .rail-item .ric { flex: none; width: 18px; height: 18px; color: #555e6b; display: flex; align-items: center; justify-content: center; }
 .rail-item .ric svg { width: 18px; height: 18px; display: block; }
 .rail-item .con { opacity: 0; width: 0; overflow: hidden; transition: opacity .1s ease, width .22s ease .15s; }
