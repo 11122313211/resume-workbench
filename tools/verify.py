@@ -314,9 +314,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=21" in page and "editor.css?v=18" in page
+    ok = "editor.js?v=22" in page and "editor.css?v=19" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=21 与 editor.css?v=18" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=22 与 editor.css?v=19" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -930,6 +930,25 @@ var CASES = {
     log("timefmt/ok", true, "合法格式无提示无痕");
   },
 
+  "railfilter": async function () {   /* rail 文档筛选：输入关键字只剩匹配行，清空恢复 */
+    await loadEditor(DOC);
+    await wwait(function () { return idoc().querySelectorAll("#rail-docs .rail-row").length >= 1; }, 8000, "文档列表渲染");
+    var si = await wwait(function () { return idoc().getElementById("rail-search"); }, 4000, "筛选框存在");
+    si.value = "verify-ui";
+    si.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () {
+      var box = idoc().getElementById("rail-docs");
+      return box.querySelectorAll(".rail-row").length >= 1 && box.textContent.indexOf("主简历") === -1;
+    }, 4000, "筛选后只剩匹配行");
+    log("railfilter/filter", true, "筛选 verify-ui 后不匹配的文档被隐藏");
+    si.value = "";
+    si.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () {
+      return idoc().getElementById("rail-docs").textContent.indexOf("主简历") !== -1;
+    }, 4000, "清空筛选全部恢复");
+    log("railfilter/clear", true, "清空后列表恢复完整");
+  },
+
   menu: async function () {   /* ⋯ 集合菜单：4 项齐全（首项=状态感知 隐藏/恢复）→ 菜单隐藏生效（琥珀眼睛出现）→ 眼睛恢复 → 上移收起 → 删除确认可取消 → Esc */
     await loadEditor(DOC);
     function visSec() {
@@ -1166,7 +1185,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1175,7 +1194,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1304,6 +1323,12 @@ def sec_headless():
             headless_case("timefmt", doc=full_tf)
         except Exception as e:
             add("HEADLESS", "timefmt", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_rf, _ids_rf = make_copy("-rf")
+            headless_case("railfilter", doc=full_rf)
+        except Exception as e:
+            add("HEADLESS", "railfilter", "FAIL", "准备副本失败: %s" % e)
 
         def prep_bad():
             write_suggestion({"items": "oops"})

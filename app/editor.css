@@ -292,3 +292,10 @@ body.splitting { cursor: col-resize; user-select: none; }
 
 /* ===== 时间列格式助手（非法格式 amber 提示） ===== */
 .time-warn { border-color: #d97706 !important; background: #fffbf2 !important; }
+
+/* ===== rail 文档筛选框（展开可见，/ 聚焦） ===== */
+#rail-search { width: 0; opacity: 0; padding: 0; margin: 4px 10px 2px; height: 26px; box-sizing: border-box;
+  border: 1px solid #ccd3dc; border-radius: 6px; font: 12.5px/1 "Microsoft YaHei", sans-serif; color: #333; background: #fff; }
+#rail:hover #rail-search, #rail:focus-within #rail-search, #rail.pinned #rail-search {
+  width: calc(100% - 20px); opacity: 1; padding: 5px 8px; }
+.rail-empty { padding: 6px 12px; font-size: 11.5px; color: #8892a0; }

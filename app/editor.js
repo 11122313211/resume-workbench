@@ -409,11 +409,14 @@ var SVG_X = svgI("<path d='M6 6l12 12M18 6L6 18'/>");
 var SVG_EYE = svgI("<path d='M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z'/><circle cx='12' cy='12' r='3'/>");
 var SVG_FOLDER = svgI("<path d='M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/>");
 var SVG_PIN = svgI("<path d='M12 16v6'/><path d='M8.5 3h7l-1 7 3.5 3.5H6L9.5 10z'/>");
-function renderRail() { // 文档列表平铺在侧栏「文档」组，当前文档带指示条；岗位副本悬停出现删除
-  var h = "";
+var railFilter = "";
+function renderRail() { // 文档列表平铺在侧栏「文档」组，当前文档带指示条；岗位副本悬停出现删除；railFilter 非空时按名称筛选
+  var f = (railFilter || "").toLowerCase();
+  var rows = "";
   (state.list || []).forEach(function (n) {
+    if (f && n.toLowerCase().indexOf(f) === -1) return;
     var job = n !== "主简历", active = n === state.name;
-    h += "<div class='rail-row" + (active ? " active" : "") + "'>" +
+    rows += "<div class='rail-row" + (active ? " active" : "") + "'>" +
          "<button class='rail-item" + (active ? " active" : "") + "' data-nav='doc' data-doc=\"" + esc(n) +
          "\" title=\"" + esc(n) + "\"" + (active ? " aria-current='true'" : "") + ">" +
          "<span class='ric'>" + (job ? SVG_TARGET : SVG_DOC) + "</span>" +
@@ -422,7 +425,7 @@ function renderRail() { // 文档列表平铺在侧栏「文档」组，当前�
                "\" title='删除此岗位副本（主简历不受影响）' aria-label='删除 " + esc(n) + "'>" + SVG_X + "</button>" : "") +
          "</div>";
   });
-  document.getElementById("rail-docs").innerHTML = h;
+  document.getElementById("rail-docs").innerHTML = (!rows && f) ? "<div class='rail-empty'>无匹配文档</div>" : rows;
 }
 
 /* ---------- 左侧卡片渲染 ---------- */
@@ -1034,6 +1037,13 @@ function bindEvents() {
       try { localStorage.setItem("vui-pinned", on ? "1" : "0"); } catch (err) {}
     }
   });
+  document.getElementById("rail-search").addEventListener("input", function () {
+    railFilter = this.value.trim();
+    renderRail();
+  });
+  document.getElementById("rail-search").addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { e.stopPropagation(); this.value = ""; railFilter = ""; renderRail(); this.blur(); }
+  });
   document.getElementById("density-seg").addEventListener("click", function (e) {
     var b = e.target.closest("[data-density]");
     if (!b || !state.doc) return;
@@ -1183,6 +1193,12 @@ function uploadPhotoBlob(blob, ext) {
       if (k === "t") { e.preventDefault(); triageExit(); return; }
     }
     if (!typing && !document.getElementById("modal") && !menuEl && k === "t") { e.preventDefault(); triageStart(); return; }
+    if (!typing && !document.getElementById("modal") && k === "/") { // /：聚焦文档筛选（:focus-within 自动展开侧栏）
+      e.preventDefault();
+      var si = document.getElementById("rail-search");
+      si.focus(); si.select();
+      return;
+    }
     if (!typing && !document.getElementById("modal") && /^[1-9]$/.test(k) &&
         !document.getElementById("ai-panel").classList.contains("ai-closed")) { // AI 面板开着：1-9 快速应用对应建议
       var aiBox = document.getElementById("ai-cards");
