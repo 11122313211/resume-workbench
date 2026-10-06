@@ -67,11 +67,19 @@ python tools/verify.py
 2. **API**：列表/新建副本/保存回读与自动留底/删除/主简历禁删/AI 请求写入与旧建议归档/**导出 E2E（真实 Edge 打印 → %PDF 头 + A4 MediaBox）**/**照片上传与扩展名白名单**；
 3. **HEADLESS UI**（Edge `--dump-dom` + 驱动页）：新建副本全链路、副本改名、导出状态点三态、备份恢复弹窗、加粗切换、AI 建议应用/全部应用/撤销、建议就绪徽标、错文档与坏格式诚实报错、发起-等待-取消状态机、⋯ 菜单与隐藏压缩、保存反馈就地化、关页兜底落盘、投递一览/筛选/一键导出/CSV。
 
-何时跑：任何 `app/` 或 `serve.py` 改动之后、提交之前。注意事项：verify 会用 `verify-tmp-*` / `verify-ui-*` 前缀的一次性副本做实验并在结束时清理，用户的 `ai-request.json` / `ai-suggestion.json` 会字节级备份还原；本次运行新增的 `ai-history` 归档与 `.backup` 备份也会被清理，用户自己的不动。
+何时跑：任何 `app/` 或 `serve.py` 改动之后、提交之前。注意事项：verify 会用 `verify-tmp-*` / `verify-ui-*` 前缀的一次性副本做实验并在结束时清理，用户的 `ai-request.json` / `ai-suggestion.json` 会字节级备份还原；本次运行新增的 `ai-history` 归档与 `.backup` 备份也会被清理，用户自己的不动。R48 起无头首例前有 Edge 预热（吸收服务替换后的冷启动假失败）。
+
+**API 协议版本约定（R41 起）**：serve.py 顶部 `APIV` 常量随 `/api/ping` 返回；**凡是改变 serve.py 行为的提交必须同步 bump `APIV` 与 tools/verify.py 的 `EXPECTED_APIV`**。verify 启动时以 `apiv` 判定外部 8618 服务是否陈旧（旧进程读磁盘会谎报 rev 指纹，apiv 不会）——陈旧则自动结束旧进程改用 in-process 当前代码，收尾经「启动简历工作台.bat」把用户的工作台拉回来。
 
 **提交闸门（机制强制，两道按序）**：`tools/hooks/pre-commit` 经 `git config core.hooksPath tools/hooks` 启用——① **隐私闸门**：暂存区含 `data/` 变更即拒绝（真实简历数据绝不入库；`VERIFY_ALLOW_DATA=1` 为维护者显式放行）；② **静态门禁**：`python tools/verify.py --static`（秒级，STATIC 层：可编译/版本联动/算法同源/数据可解析）——静态契约不过，提交被阻止。动态三层（API/无头 UI）仍需提交前人工全量运行。临时绕过：`git commit --no-verify`。快速验证某次改动：`python tools/verify.py --static`。
 
 ## 5. 迭代记录
+
+### R49 · 2026-10-06 · 终审（final review）：R39~R48 十轮独立复核 + 全量证据重验
+
+- **提出**：目标要求的「最后的 review」——以未参与本批编码的新鲜视角复核 R39~R48 十轮：提交序列与四段记录完整性、本批新增高危面代码抽查（syncAppliedAI 重算语义、/api/save 形状校验绕行、rename 备份迁移非破坏性、MutationObserver 生命周期、lintDoc 误伤面）、调试残留、PII、机制资产（电池/闸门）现状与文档同步。
+- **验证**（只读审计 + 本机复跑）：① 提交序列 R39~R48 十轮完整、每轮四段记录在案，静态门禁 7/7；② 代码抽查通过——形状校验对嵌套畸形（sections:[null] 等）逐层拒绝、rename 迁移对同名冲突只合入不覆盖、观察器只挂 body childList 无泄漏、电话/邮箱粗查对合法格式零误伤；③ `git diff a72b845..HEAD` 无 console.log/TODO/debugger 残留；④ HEAD 跟踪文件 PII 复审干净（真实姓名/电话/邮箱均为 0 命中）；⑤ §4 补录 API 协议版本约定（改 serve.py 必须 bump APIV+EXPECTED_APIV，含自动替换机制说明）；⑥ 全量电池 **62 项全绿**（exit=0，本机独立复跑，非转述）。
+- **结果**：本批十轮（2 项机制升级 + 6 项缺陷修复 + 5 项体验增强 + 2 项诚实化）全部通过终审，零阻断项。遗留与挂起不变：主简历多模板仍按 R34 决策挂起；printer.py 硬编码路径迁移机器时需手改；Mimosa 扫描为部分覆盖，不宣称完整安全审计。项目自 R0 起累计 49 轮闭环，电池 62 项。回滚：`git revert` 单提交。
 
 ### R48 · 2026-10-06 · 原生拖拽兜底重复绑定守卫 + 交付体检联系方式格式粗查
 
