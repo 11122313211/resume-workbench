@@ -1366,7 +1366,13 @@ function bindEvents() {
       }).then(function (r) {
         if (navBtn) navBtn.disabled = false;
         flashOk("✓ 已保存");
-        if (r.ok) { toast("PDF 已导出：" + r.pdf); window.open(r.pdf, "_blank"); refreshRailMeta(); }
+        if (r.ok) {
+          refreshRailMeta();
+          var w = null;
+          try { w = window.open(r.pdf, "_blank"); } catch (e) {}
+          if (w) toast("PDF 已导出：" + r.pdf);
+          else toast("PDF 已导出：" + r.pdf, 12000, { label: "打开", fn: function () { window.open(r.pdf, "_blank"); } }); // 异步链路里自动打开常被弹窗拦截：给一个手势内必成的「打开」按钮（R53）
+        }
         else toast("导出失败：" + (r.error || "未知错误"));
       }).catch(function (e) { if (navBtn) navBtn.disabled = false; setSaveState("就绪"); toast("导出失败：" + e.message); });
     }

@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=48" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=49" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=48 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=49 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1576,6 +1576,11 @@ var CASES = {
       return null;
     }, 40000, "导出后绿点出现");
     log("expmark/green", true, "导出成功 → 侧栏绿点（已导出最新）");
+    await wwait(function () {  /* R53：成功 toast 出现；弹窗被拦时同一 toast 带「打开」按钮 */
+      var t = q("#toast");
+      return t.style.display === "block" && t.textContent.indexOf("PDF 已导出") !== -1;
+    }, 8000, "导出成功反馈");
+    log("expmark/toast", true, "toast 反馈在位（被拦截时含「打开」按钮）");
   },
 
   "expmark2": async function () {  /* 导出状态可见性（琥珀）：prepare 已真实导出 → 初始绿点 → 改动保存 → 琥珀点 */
