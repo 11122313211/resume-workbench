@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=38" in page and "editor.css?v=32" in page
+    ok = "editor.js?v=39" in page and "editor.css?v=32" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=38 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=39 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -918,9 +918,15 @@ var CASES = {
     }, 8000, "卡片渲染");
     press("t");
     await wwait(function () { return idoc().getElementById("triage-hud"); }, 4000, "HUD 出现");
+    /* HUD 文案断言（R39）：triageHud 曾引用未定义变量 el 抛 ReferenceError，HUD 只剩空壳
+       而步骤照常通过——这里锁死「元素存在且文案含实时进度」两件事 */
+    await wwait(function () {
+      var h = idoc().getElementById("triage-hud");
+      return h && /取舍模式 1\/\d+/.test(h.textContent) && h.textContent.indexOf("j/k 移动") !== -1;
+    }, 4000, "HUD 文案含实时进度");
     var cur1 = await wwait(function () { return idoc().querySelector("#cards .triage-cur"); }, 4000, "当前行高亮");
     var id1 = cur1.getAttribute("data-id");
-    log("triage/start", true, "进入取舍模式，当前行 " + id1);
+    log("triage/start", true, "进入取舍模式，当前行 " + id1 + "，HUD: " + idoc().getElementById("triage-hud").textContent);
     press("j");
     await wwait(function () {
       var el = idoc().querySelector("#cards .triage-cur");
@@ -1465,6 +1471,13 @@ var CASES = {
   } catch (e) {
     log(CASE, false, String((e && e.message) || e) + " | iframeTitle=" + iframeTitle());
   } finally {
+    /* 全局 JSERR 守卫（R39）：事件处理器里的未捕获异常不阻断用例步骤，但会留痕在
+       iframe 标题上（editor.js 的 error 监听与 hookErr 都写 title）。每例收尾统一检查，
+       杜绝「步骤全 PASS 但页面带伤」的漏网——triageHud 引用未定义 el 正是这类逃逸。 */
+    try {
+      var t = String(iframeTitle());
+      if (t.indexOf("JSERR:") !== -1) log("jserr", false, "页面存在未捕获 JS 错误: " + t);
+    } catch (e) {}
     document.title = "DONE";
   }
 })();

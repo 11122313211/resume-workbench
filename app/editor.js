@@ -502,7 +502,7 @@ function triageCollect() { // 折叠章节里的行不可见（offsetParent=null
     return el.matches(".card.section, .card.entry, .bullet-row") && el.offsetParent !== null;
   }).map(function (el) { return el.getAttribute("data-id"); });
 }
-function triageHud() {
+function triageHud(el) { // el=当前高亮行（由 triagePaint 传入）：HUD 顺带展示该行的 JD 命中徽标
   var hud = document.getElementById("triage-hud");
   if (!hud) {
     hud = document.createElement("div");
@@ -520,7 +520,7 @@ function triagePaint() {
   var id = triageIds[triageIdx];
   var el = id && document.querySelector('#cards [data-id="' + id + '"]');
   if (el) { el.classList.add("triage-cur"); el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
-  triageHud();
+  triageHud(el);
 }
 function triageStart() { // 从视口内最近的一行开始，不在视口就从头
   triageCollect();
