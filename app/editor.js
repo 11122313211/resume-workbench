@@ -413,8 +413,10 @@ function closeFind() {
 }
 
 var DELIV_ST = ["未投", "已投", "面试", "通过", "挂"]; // 投递状态循环顺序（与 serve.py DELIV_ST 白名单一致）
-function cycleDeliv(name, cur) { // 投递状态跟踪（R33）：点胶囊循环推进，服务端 sidecar 记录，刷新后重建一览
-  var nxt = DELIV_ST[(DELIV_ST.indexOf(cur) + 1) % DELIV_ST.length];
+function cycleDeliv(name, cur, back) { // 投递状态跟踪（R33）：点胶囊循环推进、Shift+点反向退回（R58），服务端 sidecar 记录，刷新后重建一览
+  var i = DELIV_ST.indexOf(cur), n = DELIV_ST.length;
+  if (i < 0) i = 0;
+  var nxt = DELIV_ST[((back ? i - 1 : i + 1) % n + n) % n];
   postJSON("/api/delivery", { name: name, st: nxt }).then(function () { showStats(); })
     .catch(function () { toast("状态保存失败：本地服务可能没在运行"); });
 }
@@ -510,7 +512,7 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
       "</td><td>" + esc(it.role) + "</td><td><span class='stats-dot " + it.cls + "'></span>" + it.st +
       "</td><td class='stats-time'>" + esc(it.exp) +
       "</td><td><button class='deliv-pill d" + di + "' data-dv=\"" + esc(it.n) +
-      "\" title=\"点击推进到「" + DELIV_ST[(di + 1) % DELIV_ST.length] + "」\">" + esc(it.dv.st || "未投") + "</button></td>" +
+      "\" title=\"点击推进到「" + DELIV_ST[(di + 1) % DELIV_ST.length] + "」，Shift+点击退回「" + DELIV_ST[((di - 1) % DELIV_ST.length + DELIV_ST.length) % DELIV_ST.length] + "」\">" + esc(it.dv.st || "未投") + "</button></td>" +
       "<td>" + (it.st !== "已导出" ? "<button class='stats-export' data-ex=\"" + esc(it.n) +
       "\" title=\"跳到该副本并走标准导出（含交付体检）\">" + (it.st === "改过未重导" ? "⬇ 重导" : "⬇ 导出") + "</button>" : "") + "</td></tr>";
   }).join("");
@@ -522,7 +524,7 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
       t[1] + (on ? (statsSort.dir === "asc" ? " ▲" : " ▼") : "") + "</th>";
   }).join("");
   if (rows) body = "<table class='stats-table'><thead><tr>" + ths + "<th></th></tr></thead><tbody>" +
-      rows + "</tbody></table><p class='ob-tip'>点行跳到对应副本，点状态胶囊推进投递进度（未投→已投→面试→通过→挂）；点表头按列排序，再点切换升/降序；「改过未重导」= 导出后又编辑过，点 ⬇ 重导即补最新版（主简历不计入投递）</p>";
+      rows + "</tbody></table><p class='ob-tip'>点行跳到对应副本，点状态胶囊推进投递进度（未投→已投→面试→通过→挂，Shift+点击反向退回）；点表头按列排序，再点切换升/降序；「改过未重导」= 导出后又编辑过，点 ⬇ 重导即补最新版（主简历不计入投递）</p>";
   else body = "<div class='ai-empty'>" + (items.length ? "没有「" + esc(statsFilter) + "」状态的副本" :
       "还没有岗位副本。左侧「＋新建岗位副本」创建后，这里会汇总各份的导出状态") + "</div>";
   var ov = document.createElement("div");
@@ -553,7 +555,7 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
     var ex = e.target.closest && e.target.closest(".stats-export");
     if (ex) { exportByName(ex.getAttribute("data-ex")); return; } // 一键导出优先于行跳转
     var pill = e.target.closest && e.target.closest(".deliv-pill");
-    if (pill) { cycleDeliv(pill.getAttribute("data-dv"), pill.textContent); return; } // 胶囊优先于行跳转
+    if (pill) { cycleDeliv(pill.getAttribute("data-dv"), pill.textContent, e.shiftKey); return; } // 胶囊优先于行跳转；Shift+点击反向（R58）
     var tr = e.target.closest && e.target.closest(".stats-row");
     if (tr) { ov.remove(); switchDoc(tr.getAttribute("data-doc")); }
   });

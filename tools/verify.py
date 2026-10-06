@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=53" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=54" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=53 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=54 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1448,6 +1448,14 @@ var CASES = {
       return p && p.textContent !== before;
     }, 6000, "点胶囊状态推进");
     log("stats/cycle", true, "投递状态胶囊点击即推进（sidecar 记录，刷新回读一致）");
+    var after = q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill').textContent;
+    q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })); // Shift+点击反向（R58）
+    await wwait(function () {
+      var p = q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill');
+      return p && p.textContent === before; // 退回到点击前的状态，顺带还原现场
+    }, 6000, "Shift+点击退回原状态");
+    log("stats/shift-back", true, "Shift+点击胶囊反向退回（" + after + " → " + before + "，不用绕一圈）");
     q('#modal .stats-row[data-doc="' + DOC + '"]').click();
     await wwait(function () { return !q("#modal"); }, 4000, "点行后弹窗关闭");
     await wwait(function () { return railShows(DOC); }, 6000, "定位到对应副本");
