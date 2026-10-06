@@ -1700,7 +1700,9 @@ function uploadPhotoBlob(blob, ext) {
     var batch = [];
     items.forEach(function (it, i) {
       if (!it || it.type === "note" || state.appliedAI[i]) return;
-      if (!findAny(it.target || "")) return; // 目标缺失的跳过，不阻塞整批
+      var f = findAny(it.target || "");
+      if (!f) return; // 目标缺失的跳过，不阻塞整批
+      if (it.type === "rewrite" && f.kind !== "bullet") return; // 改写打在章节/条目上是打空炮，同样跳过（R44）
       applyItem(it);
       state.appliedAI[i] = true;
       batch.push(i);
@@ -1876,6 +1878,10 @@ function aiApply(i2) { // 应用第 i2 条建议：按钮点击与键盘 1-9 共
     toast("第 " + (i2 + 1) + " 条建议的目标条目已不在当前文档中（文档可能已改动）");
     return;
   }
+  if (it.type === "rewrite" && found.kind !== "bullet") { // rewrite 打在章节/条目上只会写入死属性（R44）
+    toast("第 " + (i2 + 1) + " 条建议的改写目标不是成果行，已跳过（rewrite 只对成果生效）");
+    return;
+  }
   applyItem(it);
   state.appliedAI[i2] = true;
   afterChange(true, true);
@@ -1925,7 +1931,9 @@ function loadSuggestions() {
     markAISeen(); // 渲染给用户看了：记已读，徽标/提醒不再重复
     box.__items = arr;
     var applicable = arr.some(function (it, i) {
-      return it && it.type !== "note" && !state.appliedAI[i] && findAny(it.target || "");
+      if (!it || it.type === "note" || state.appliedAI[i]) return false;
+      var f = findAny(it.target || "");
+      return !!f && (it.type !== "rewrite" || f.kind === "bullet"); // 全部应用工具条只认真实可应用的建议（R44）
     });
     toolbar.classList.toggle("hidden", !applicable);
     if (count) count.textContent = arr.length + " 条建议";

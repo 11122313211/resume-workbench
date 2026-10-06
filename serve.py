@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 JOBS = DATA / "jobs"
 PORT = 8618
-APIV = 3  # API 协议版本：行为有变必须 +1 并同步 tools/verify.py 的 EXPECTED_APIV（旧进程靠它现形）
+APIV = 4  # API 协议版本：行为有变必须 +1 并同步 tools/verify.py 的 EXPECTED_APIV（旧进程靠它现形）
 
 sys.path.insert(0, str(ROOT / "tools"))
 import printer  # noqa: E402
@@ -465,6 +465,7 @@ class Handler(SimpleHTTPRequestHandler):
                     + json.dumps(output["format"], ensure_ascii=False, indent=2) + "\n"
                     "质量要求：\n"
                     "- type 取值：rewrite=改写（text 填完整改写文本）、hide=建议隐藏、show=建议恢复显示、note=说明。\n"
+                    "- rewrite 的 target 必须是成果行（bullet）的 id；对章节/条目请改用 hide/show/note。\n"
                     "- rewrite 的 text 以动词开头并包含量化结果；每条 reason 用一句话说明理由。\n"
                     "- " + mode_tip + "\n"
                     "- 共 5~10 条，宁缺毋滥。\n"

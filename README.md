@@ -71,7 +71,7 @@ python export.py jobs/某岗位
   {"type": "note",    "text": "整体建议…"}
 ]}
 ```
-`type` 取值：`rewrite` 改写（text 填完整文本）/ `hide` 建议隐藏 / `show` 建议恢复 / `note` 说明；`target` 必须用请求文件 `doc` 里对应的条目 id。agent 写坏格式时面板会诚实报错（绝不假成功）。
+`type` 取值：`rewrite` 改写（text 填完整文本，**target 必须是成果行的 id**）/ `hide` 建议隐藏 / `show` 建议恢复 / `note` 说明；`target` 必须用请求文件 `doc` 里对应的条目 id。agent 写坏格式时面板会诚实报错（绝不假成功）；改写目标不是成果行时应用会被跳过并提示，绝不写入无效数据。
 
 ## 数据模型（data/*.json）
 
