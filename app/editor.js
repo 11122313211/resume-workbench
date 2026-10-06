@@ -397,8 +397,9 @@ function buildStatsItems(r) { // 一览行数据（R37 从 renderStats 抽出）
   });
   return items;
 }
-function csvCell(v) { // CSV 单元格转义：含逗号/引号/换行时整体加引号，内部引号翻倍
+function csvCell(v) { // CSV 单元格转义：含逗号/引号/换行时整体加引号，内部引号翻倍；以 =+-@\t 开头时加 ' 前缀防 Excel 公式注入（R38 终审加固）
   v = String(v == null ? "" : v);
+  if (/^[=+\-@\t]/.test(v)) v = "'" + v;
   return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 }
 function buildDeliveryCsv(items) { // 台账导出（R37）：一览行 → CSV 文本；开头的 UTF-8 BOM 让 Excel 正确识别中文

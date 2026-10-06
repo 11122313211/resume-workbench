@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=37" in page and "editor.css?v=32" in page
+    ok = "editor.js?v=38" in page and "editor.css?v=32" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=37 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=38 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
