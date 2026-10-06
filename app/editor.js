@@ -1168,10 +1168,21 @@ var pendingSave = null; // 待落盘的 {name, doc}：捕获触发时的归属�
 function saveFailToast() {
   toast("保存失败——内容仍在页面上，点「重试」或右下状态文字", 8000, { label: "重试", fn: flushSave });
 }
+var staleWarn = { name: "", at: 0 }; // 多窗口冲突提示节流（R59）：同文档 5 分钟只提醒一次
 function doSave(name, doc) {
   setSaveState("✎ 修改中…", "busy");
   return postJSON("/api/save", { name: name, doc: doc }).then(function (r) {
-    if (r.ok) { flashOk("✓ 已保存"); refreshRailMeta(); } // savedAt 变化 → 侧栏状态点即时转琥珀
+    if (r.ok) {
+      if (r.savedAt && doc && doc.meta) doc.meta.savedAt = r.savedAt; // 基线推进：自己下一次保存不误报（R59）
+      if (r.stale && name) { // 别的窗口在本文档加载后保存过：本窗口的覆盖生效了，必须让用户知道（R59）
+        var nw = Date.now();
+        if (name !== staleWarn.name || nw - staleWarn.at > 5 * 60 * 1000) {
+          staleWarn.name = name; staleWarn.at = nw;
+          toast("这份文档刚被其他窗口修改过——本次保存以当前窗口内容为准；如需那边的版本，去「历史备份」找回", 12000);
+        }
+      }
+      flashOk("✓ 已保存"); refreshRailMeta(); // savedAt 变化 → 侧栏状态点即时转琥珀
+    }
     else { setSaveState("⚠ 保存失败", "warn"); saveFailToast(); }
   }).catch(function () {
     setSaveState("⚠ 保存失败", "warn"); saveFailToast();
@@ -1418,12 +1429,14 @@ function bindEvents() {
     function go() {
       if (navBtn) navBtn.disabled = true;
       setSaveState("⬇ 导出中…", "warn");
-      postJSON("/api/save", { name: state.name, doc: state.doc }).then(function () {
+      postJSON("/api/save", { name: state.name, doc: state.doc }).then(function (sv) {
+        if (sv && sv.savedAt && state.doc.meta) state.doc.meta.savedAt = sv.savedAt; // 基线推进（R59）
         return postJSON("/api/export", { name: state.name });
       }).then(function (r) {
         if (navBtn) navBtn.disabled = false;
         flashOk("✓ 已保存");
         if (r.ok) {
+          if (r.savedAt && state.doc.meta) state.doc.meta.savedAt = r.savedAt; // 导出也推进磁盘 savedAt：基线同步，别让自己的导出误报冲突（R59）
           refreshRailMeta();
           var w = null;
           try { w = window.open(r.pdf, "_blank"); } catch (e) {}

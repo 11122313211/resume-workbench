@@ -59,7 +59,7 @@ RESULTS = []           # (section, name, status, evidence)
 SERVER_NOTE = ""       # 服务复用/旧代码提示
 HTTPD = None           # 本脚本 in-process 起的服务（只 shutdown 自己起的）
 EXTERNAL_REVIVED = False  # 本轮把陈旧的外部 8618 服务替换成了 in-process：收尾时负责把工作台拉回来
-EXPECTED_APIV = 5      # 期望的 serve.py API 协议版本（改 serve.py 行为时同步 bump 两边；旧进程无此字段=陈旧）
+EXPECTED_APIV = 6      # 期望的 serve.py API 协议版本（改 serve.py 行为时同步 bump 两边；旧进程无此字段=陈旧）
 
 
 def add(section, name, status, evidence=""):
@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=54" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=55" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=54 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=55 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -434,6 +434,7 @@ def sec_api(server_ok):
         add("API", "主简历禁删", "SKIP", "服务不可用")
         add("API", "导出 E2E（A4 PDF）", "SKIP", "服务不可用")
         add("API", "照片上传", "SKIP", "服务不可用")
+        add("API", "多窗口冲突检测", "SKIP", "服务不可用")
         return
     add("API", "服务可用性", "PASS", SERVER_NOTE)
 
@@ -650,6 +651,40 @@ def sec_api(server_ok):
             "5 种畸形全 400=%s 原档无损=%s 合法保存=%s" % (allrej, intact, good))
     except Exception as e:
         add("API", "保存形状校验", "FAIL", "异常: %s" % e)
+
+    # d2b) 多窗口冲突检测（R59）：基线落后于磁盘 savedAt → stale=true；基线最新 → stale=false 且回传 savedAt
+    full_mw = None
+    try:
+        full_mw = "jobs/verify-tmp-mw-" + TS
+        http_req("POST", "/api/newjob", {"name": "verify-tmp-mw-" + TS})
+        st, d0 = get_doc(full_mw)
+        d0 = json.loads(json.dumps(d0))
+        st, b1 = http_req("POST", "/api/save", {"name": full_mw, "doc": d0})
+        r1 = tryjson(b1)  # 首次保存：基线==磁盘 → 不 stale
+        d_b = json.loads(json.dumps(d0))
+        d_b.setdefault("meta", {})["savedAt"] = r1.get("savedAt") or ""  # B 窗口基线推进到上次回传
+        st, b2 = http_req("POST", "/api/save", {"name": full_mw, "doc": d_b})
+        r2 = tryjson(b2)  # B 第二次保存：基线最新 → 仍不 stale（自己不误报自己）
+        st, d1 = get_doc(full_mw)
+        d_a = json.loads(json.dumps(d1))
+        d_a.setdefault("meta", {})["savedAt"] = "2000-01-01T00:00:00"  # A 是老窗口：基线停在远古
+        st, b3 = http_req("POST", "/api/save", {"name": full_mw, "doc": d_a})
+        r3 = tryjson(b3)  # A 的保存：磁盘戳 > A 基线 → stale=true
+        mw_ok = (r1.get("ok") is True and r1.get("stale") is False and
+                 r2.get("ok") is True and r2.get("stale") is False and
+                 r3.get("ok") is True and r3.get("stale") is True and
+                 bool(r3.get("savedAt")))
+        add("API", "多窗口冲突检测", "PASS" if mw_ok else "FAIL",
+            "首次=%s 落后基线报 stale=%s 自身基线不误报=%s 回传savedAt=%s" % (
+                r1.get("stale"), r3.get("stale"), r2.get("stale"), bool(r3.get("savedAt"))))
+    except Exception as e:
+        add("API", "多窗口冲突检测", "FAIL", "异常: %s" % e)
+    finally:
+        if full_mw:
+            try:
+                http_req("POST", "/api/delete", {"name": full_mw})
+            except Exception:
+                pass
 
     # d3) 漂移锚点（R30）：新副本 meta 带 masterAt，且不晚于主简历当前 savedAt（新建副本无假漂移）
     try:

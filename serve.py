@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 JOBS = DATA / "jobs"
 PORT = 8618
-APIV = 5  # API 协议版本：行为有变必须 +1 并同步 tools/verify.py 的 EXPECTED_APIV（旧进程靠它现形）
+APIV = 6  # API 协议版本：行为有变必须 +1 并同步 tools/verify.py 的 EXPECTED_APIV（旧进程靠它现形）
 
 sys.path.insert(0, str(ROOT / "tools"))
 import printer  # noqa: E402
@@ -299,12 +299,17 @@ class Handler(SimpleHTTPRequestHandler):
                 except Exception:
                     prev_meta = {}
                 m = d.setdefault("meta", {})
+                client_base = str(m.get("savedAt") or "")  # 客户端加载时的基线戳（R59）：磁盘比它新 = 有别的窗口保存过
                 # exportedAt 由服务端独占保管：客户端内存里的 doc 可能不含它，保存不能抹掉导出记录
                 if not m.get("exportedAt") and prev_meta.get("exportedAt"):
                     m["exportedAt"] = prev_meta["exportedAt"]
+                prev_saved = str(prev_meta.get("savedAt") or "")
                 m["savedAt"] = datetime.now().isoformat(timespec="seconds")
                 write_doc(body["name"], d)
-                return self._json({"ok": True})
+                # 多标签页冲突检测（R59）：基线已知且磁盘更新过 → 本窗口的保存会盖掉别的窗口的版本。
+                # 本地单人场景仍允许保存（last-write-wins），但把 stale 告诉客户端，由它提示用户；savedAt 回传供基线推进。
+                stale = bool(prev_saved and client_base and prev_saved > client_base)
+                return self._json({"ok": True, "stale": stale, "savedAt": m["savedAt"]})
 
             if parsed.path == "/api/delete":
                 # 仅允许删除岗位副本；主简历明确禁删。连带清理已导出的同名 PDF。
@@ -433,7 +438,7 @@ class Handler(SimpleHTTPRequestHandler):
                 doc["meta"]["savedAt"] = now
                 write_doc(name, doc)
                 return self._json({"ok": True, "pdf": "/data/" + (name + ".pdf" if name != "主简历" else "主简历.pdf"),
-                                   "pages_hint": doc.get("kind")})
+                                   "pages_hint": doc.get("kind"), "savedAt": doc["meta"]["savedAt"]})
 
             if parsed.path == "/api/ai-request":
                 name = safe_name(body["name"])
