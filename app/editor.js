@@ -1844,6 +1844,22 @@ function updateAISteps() { // 三步引导：完成的步骤打勾（切文档/�
   steps[1].classList.toggle("done", aiWaiting || !!aiPromptCache);
   steps[2].classList.toggle("done", aiHaveValidSug);
 }
+function restoreAIRequest() { // 发起后切走再回来（R51）：从服务端恢复在途请求——提示词可再复制、未完成则回到等待态，不必重发起
+  var name = state.name;
+  getJSON("/api/ai-request").then(function (r) {
+    if (state.name !== name) return; // 请求期间又切了档
+    if (!r || !r.exists || r.for !== state.name || !r.agentPrompt) return;
+    aiPromptCache = r.agentPrompt;
+    var cp = document.getElementById("ai-copy");
+    if (cp) cp.disabled = false;
+    if (!aiHaveValidSug && !aiWaiting && r.time) { // 有请求没建议：视为在途，恢复等待态（只认 10 分钟内的请求）
+      var t0 = new Date(String(r.time).replace(" ", "T")).getTime();
+      if (isFinite(t0) && Date.now() - t0 < 10 * 60000) setAIWaiting(true);
+    }
+    updateAISteps();
+  }).catch(function () {});
+}
+
 function toggleAIPanel(open) {
   var p = document.getElementById("ai-panel");
   var willOpen = open == null ? p.classList.contains("ai-closed") : open;
@@ -1856,6 +1872,7 @@ function toggleAIPanel(open) {
     }
     loadSuggestions();
     loadAIHistory(); // 历史建议归档列表：重新发起前的上一轮不丢，可只读回看
+    restoreAIRequest();
     updateAISteps();
     updateJdMarks(); // JD 随文档恢复后立即刷新命中徽标
     setAIBadge(false); // 打开即视为查看：徽标熄灭（loadSuggestions 会记已读）

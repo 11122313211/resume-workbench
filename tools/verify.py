@@ -59,7 +59,7 @@ RESULTS = []           # (section, name, status, evidence)
 SERVER_NOTE = ""       # 服务复用/旧代码提示
 HTTPD = None           # 本脚本 in-process 起的服务（只 shutdown 自己起的）
 EXTERNAL_REVIVED = False  # 本轮把陈旧的外部 8618 服务替换成了 in-process：收尾时负责把工作台拉回来
-EXPECTED_APIV = 4      # 期望的 serve.py API 协议版本（改 serve.py 行为时同步 bump 两边；旧进程无此字段=陈旧）
+EXPECTED_APIV = 5      # 期望的 serve.py API 协议版本（改 serve.py 行为时同步 bump 两边；旧进程无此字段=陈旧）
 
 
 def add(section, name, status, evidence=""):
@@ -463,9 +463,13 @@ def sec_api(server_ok):
         st3, body3 = http_req("GET", "/api/ai-history")
         r3 = tryjson(body3)
         list_ok = st3 == 200 and r3.get("ok") is True and len(r3.get("items") or []) >= 1
-        allok = st == 200 and r.get("ok") is True and agent_ok and fields_ok and sug_gone and arch_ok and list_ok
-        ev = "http=%s ok=%s agentPrompt=%s fields=%s 假建议已删=%s 旧建议已归档=%s /api/ai-history=%s" % (
-            st, r.get("ok"), agent_ok, fields_ok, sug_gone, arch_ok, list_ok)
+        # R51：GET /api/ai-request 读现存请求（恢复在途等待态用）
+        st4, body4 = http_req("GET", "/api/ai-request")
+        r4 = tryjson(body4)
+        get_ok = st4 == 200 and r4.get("exists") is True and r4.get("for") == "主简历" and bool(r4.get("agentPrompt"))
+        allok = st == 200 and r.get("ok") is True and agent_ok and fields_ok and sug_gone and arch_ok and list_ok and get_ok
+        ev = "http=%s ok=%s agentPrompt=%s fields=%s 假建议已删=%s 旧建议已归档=%s /api/ai-history=%s GET请求=%s" % (
+            st, r.get("ok"), agent_ok, fields_ok, sug_gone, arch_ok, list_ok, get_ok)
         if not allok:
             ev += " | " + SERVER_NOTE
         add("API", "/api/ai-request 行为", "PASS" if allok else "FAIL", ev)
@@ -954,6 +958,14 @@ var CASES = {
     rb.click();
     await wwait(function () { return rb.textContent.indexOf("发起 AI 优化") !== -1; }, 5000, "取消后文案复位");
     log("ai-request/cancel", true, "再点取消，文案回到「发起 AI 优化」");
+    /* R51：切走再回来——在途请求从服务端恢复，提示词可再复制，不必重发起 */
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true }));
+    await sleep(700);
+    await wwait(function () { return q("#ai-copy").disabled; }, 4000, "切走后复制按钮复位");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }));
+    await wwait(function () { return railShows(DOC); }, 8000, "切回原文档");
+    await wwait(function () { return !q("#ai-copy").disabled; }, 6000, "切回后提示词已恢复");
+    log("ai-request/restore", true, "切走再回来：在途请求自动恢复（复制按钮解锁，无需重发起）");
   },
 
   "ai-steps": async function () {

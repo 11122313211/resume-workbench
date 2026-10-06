@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 JOBS = DATA / "jobs"
 PORT = 8618
-APIV = 4  # API 协议版本：行为有变必须 +1 并同步 tools/verify.py 的 EXPECTED_APIV（旧进程靠它现形）
+APIV = 5  # API 协议版本：行为有变必须 +1 并同步 tools/verify.py 的 EXPECTED_APIV（旧进程靠它现形）
 
 sys.path.insert(0, str(ROOT / "tools"))
 import printer  # noqa: E402
@@ -193,6 +193,18 @@ class Handler(SimpleHTTPRequestHandler):
                 if not p.is_file():
                     return self._json({"ok": True, "items": []})
                 return self._json(json.loads(p.read_text(encoding="utf-8")))
+
+            if parsed.path == "/api/ai-request":
+                # 读现存请求（R51）：发起后切走再回来，客户端据此恢复提示词缓存与等待态，不必重发起
+                p = DATA / "ai-request.json"
+                if not p.is_file():
+                    return self._json({"ok": True, "exists": False})
+                try:
+                    d = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    return self._json({"ok": True, "exists": False})
+                return self._json({"ok": True, "exists": True, "for": d.get("for", ""),
+                                   "time": d.get("time", ""), "agentPrompt": d.get("agentPrompt", "")})
 
             if parsed.path == "/api/ai-history":
                 hist_dir = DATA / "ai-history"
