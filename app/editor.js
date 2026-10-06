@@ -286,7 +286,7 @@ function findBar() { // 惰性创建：结构只建一次
   document.body.appendChild(b);
   document.getElementById("find-in").addEventListener("input", function () { findScan(this.value); });
   document.getElementById("find-in").addEventListener("keydown", function (e) {
-    if (e.key === "Escape") { e.preventDefault(); closeFind(); return; }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeFind(); return; } // stopPropagation：Esc 只关最顶层（查找条），不连带关 AI 抽屉（与 rail-search 同法）
     if (e.key === "Enter") { e.preventDefault(); findGoto(e.shiftKey ? -1 : 1); return; }
     e.stopPropagation(); // 查找条内按键不进全局分发
   });
@@ -652,6 +652,7 @@ function cycleDoc(dir) { // Alt+↑/↓ 循环切换文档（R28）：主简历�
 function switchDoc(name) {
   flushSave(); // 先把上一个文档挂起的编辑落盘，避免 900ms 窗口内切档串写
   triageExit(); // 取舍模式不跨文档：高亮与 HUD 是旧文档 DOM 的引用
+  closeFind(); // 查找命中不跨文档：旧 id 在新文档里可能恰好存在，跳转会定位到错误内容
   state.name = name;
   try { localStorage.setItem("vui-last", name); } catch (e) {}
   return getJSON("/api/doc?name=" + encodeURIComponent(name)).then(function (doc) {
@@ -1092,6 +1093,7 @@ function afterChange(structural, force) {
   updateChars();
   updateJdMarks();
   updateTimeFmt(); // 手打时间实时校验提示
+  if (findOpen() && findState.q) findScan(findState.q); // 查找条开着时编辑内容 → 命中实时重扫，计数不说谎
 }
 
 /* ---------- 事件绑定 ---------- */
@@ -1621,7 +1623,7 @@ function uploadPhotoBlob(blob, ext) {
     else if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
     else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
     else if (k === "j") { e.preventDefault(); toggleAIPanel(); }
-    else if (k === "f") { e.preventDefault(); openFind(); } // 文档内查找（输入框聚焦时也可开，浏览器习惯）
+    else if (k === "f" && !document.getElementById("modal")) { e.preventDefault(); openFind(); } // 文档内查找（弹窗开着不穿透开查找条，Esc 层序以弹窗为顶）
     else if (k === "b" && e.target && e.target.tagName === "TEXTAREA") { e.preventDefault(); toggleBold(e.target); }
   });
 

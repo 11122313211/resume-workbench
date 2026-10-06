@@ -73,6 +73,13 @@ python tools/verify.py
 
 ## 5. 迭代记录
 
+### R40 · 2026-10-06 · 查找条分层加固：Esc 不再连带关 AI 抽屉、弹窗下不穿透、切档与编辑后的命中保鲜
+
+- **提出**：审计 Esc 分层时发现三处查找条（R35）的层序与生命周期缺口：① 查找条输入框内按 Esc 只 `closeFind()` 未 `stopPropagation`，事件继续冒泡到全局处理器把 AI 抽屉也关掉（用户在 AI 面板旁查找，一按 Esc 两层全关）；② 弹窗开着按 Ctrl+F 会在弹窗遮罩之下打开查找条（z-index 低于 modal-ov，开了也看不见）；③ 切换文档不关查找条，旧文档的命中 id 在新文档里可能恰好存在，Enter 会跳到错误内容；④ 查找条开着时编辑内容，命中列表与计数停留在旧状态。
+- **开发**：① find-in 的 Esc 分支补 `stopPropagation()`（与 rail-search 同法，Esc 只关最顶层）；② 全局 Ctrl+F 增加 `!document.getElementById("modal")` 守卫；③ `switchDoc()` 增加 `closeFind()`（与 triageExit 同列：会话态不跨文档）；④ `afterChange()` 尾部对开着的查找条实时重扫（`findScan(findState.q)`），计数与命中始终反映当前内容。
+- **验证**：find 用例从 3 beat 扩到 6 beat（esc-layer / modal-guard / rescan 三个新断言全部按「修复前会失败」的方式构造：esc-layer 先开 AI 再在查找条内按 Esc 验 AI 仍在；modal-guard 开引导弹窗后按 Ctrl+F 验查找条未开；rescan 改写命中文本后验计数变「无」），全量 **55 项全绿**（exit=0）。
+- **结果**：Esc 层序恢复「一次只关一层」的既定语法；查找条生命周期与文档会话严格对齐。版本契约 js?v=40。回滚：`git revert` 单提交。
+
 ### R39 · 2026-10-06 · 修复取舍 HUD 空白（R14 引入的 ReferenceError）+ 验证电池补全局 JSERR 守卫
 
 - **提出**：新一轮审计通读 editor.js 发现 `triageHud()` 内 `var hitEl = el && el.querySelector(".jd-hit")` 引用了未定义的 `el`（R14 加 JD 命中联动时笔误）——该函数每次执行都抛 ReferenceError，后果是取舍模式 HUD 只剩一个空壳 div，进度与快捷键提示自 R14 起从未显示；且 55 项电池没抓到，因为 triage 用例只断言「HUD 元素存在」，而异常发生在事件处理器里不阻断步骤，只把错误留痕在 iframe 标题（JSERR）上——这是电池的系统性盲区。

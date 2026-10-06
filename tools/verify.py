@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=39" in page and "editor.css?v=32" in page
+    ok = "editor.js?v=40" in page and "editor.css?v=32" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=39 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=40 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1180,6 +1180,42 @@ var CASES = {
     fi.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await wwait(function () { return !q("#find-bar.on"); }, 4000, "Esc 关闭查找条");
     log("find/close", true, "Esc 关闭查找条");
+
+    /* R40 分层加固三连：
+       ① 查找条内 Esc 只关查找条，不连带关 AI 抽屉（修复前全局 Esc 处理器会再关一层）；
+       ② 弹窗开着 Ctrl+F 不穿透开查找条（修复前查找条开在弹窗遮罩之下）；
+       ③ 切文档自动关闭查找条（命中不跨文档）。 */
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+    await wwait(function () { return q("#find-bar.on #find-in"); }, 4000, "再次打开查找条");
+    clickEl('[data-nav="ai"]');
+    await wwait(function () { return q("#ai-panel") && !q("#ai-panel").classList.contains("ai-closed"); }, 6000, "AI 抽屉打开");
+    q("#find-in").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await wwait(function () { return !q("#find-bar.on"); }, 4000, "查找条 Esc 关闭");
+    await wwait(function () { return q("#ai-panel") && !q("#ai-panel").classList.contains("ai-closed"); }, 3000, "AI 抽屉仍在");
+    log("find/esc-layer", true, "查找条内 Esc 只关查找条，AI 抽屉不受连带");
+    clickEl('[data-nav="ai"]'); // 收起抽屉，还原现场
+    await wwait(function () { return q("#ai-panel").classList.contains("ai-closed"); }, 4000, "AI 抽屉收起");
+    clickEl('[data-nav="help"]');
+    await wwait(function () { return q("#modal .onboard"); }, 4000, "引导弹窗打开");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+    await wwait(function () { return q("#modal .onboard"); }, 2000, "弹窗仍在");
+    var leakt = !q("#find-bar.on");
+    log("find/modal-guard", leakt, leakt ? "弹窗开着 Ctrl+F 不再穿透开查找条" : "Ctrl+F 穿透了弹窗（应被拦截）");
+    clickEl("#modal [data-m='ok']");
+    await wwait(function () { return !q("#modal"); }, 4000, "弹窗关闭");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+    await wwait(function () { return q("#find-bar.on #find-in"); }, 4000, "查找条打开");
+    fi.value = "Zq7x";
+    fi.dispatchEvent(new Event("input", { bubbles: true }));
+    q("#find-next").click();
+    await wwait(function () { return q("#cards .bullet-row.find-cur"); }, 4000, "命中定位");
+    var rowBefore = q("#cards .bullet-row.find-cur");
+    ta.value = "已改写不再含关键词";
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () { return q("#find-count").textContent.indexOf("无") !== -1; }, 4000, "编辑后命中实时重扫");
+    log("find/rescan", true, "编辑内容后命中计数实时更新（无残留旧命中）");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await wwait(function () { return !q("#find-bar.on"); }, 4000, "收尾关闭查找条");
   },
 
   "statsfilter": async function () {  /* 台账收尾（R36）：📊 徽标在位 → 已投筛选只剩已投副本 → 全部恢复 */
