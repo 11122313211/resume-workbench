@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 JOBS = DATA / "jobs"
 PORT = 8618
-APIV = 2  # API 协议版本：行为有变必须 +1 并同步 tools/verify.py 的 EXPECTED_APIV（旧进程靠它现形）
+APIV = 3  # API 协议版本：行为有变必须 +1 并同步 tools/verify.py 的 EXPECTED_APIV（旧进程靠它现形）
 
 sys.path.insert(0, str(ROOT / "tools"))
 import printer  # noqa: E402
@@ -251,18 +251,47 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._upload_photo(parsed)
             body = self._body()
             if parsed.path == "/api/save":
-                if isinstance(body.get("doc"), dict):
-                    d = body["doc"]
-                    try:
-                        prev_meta = read_doc(body["name"]).get("meta") or {}
-                    except Exception:
-                        prev_meta = {}
-                    m = d.setdefault("meta", {})
-                    # exportedAt 由服务端独占保管：客户端内存里的 doc 可能不含它，保存不能抹掉导出记录
-                    if not m.get("exportedAt") and prev_meta.get("exportedAt"):
-                        m["exportedAt"] = prev_meta["exportedAt"]
-                    m["savedAt"] = datetime.now().isoformat(timespec="seconds")
-                write_doc(body["name"], body["doc"])
+                doc = body.get("doc")
+                # 形状校验（R43）：磁盘上的简历 JSON 是全部功能的根，畸形结构（null/字符串/数字数组）
+                # 一旦落盘，/api/doc 与编辑器会整体趴窝，只能靠备份人工捞——在写盘前最后一道拦住
+                def shape_bad():
+                    if not isinstance(doc, dict):
+                        return "doc 必须是对象"
+                    if not isinstance(doc.get("meta", {}), dict):
+                        return "meta 必须是对象"
+                    secs = doc.get("sections", [])
+                    if not isinstance(secs, list):
+                        return "sections 必须是数组"
+                    for s in secs:
+                        if not isinstance(s, dict):
+                            return "sections 元素必须是对象"
+                        ents = s.get("entries", [])
+                        if not isinstance(ents, list):
+                            return "entries 必须是数组"
+                        for e in ents:
+                            if not isinstance(e, dict):
+                                return "entries 元素必须是对象"
+                            bls = e.get("bullets", [])
+                            if not isinstance(bls, list):
+                                return "bullets 必须是数组"
+                            for b in bls:
+                                if not isinstance(b, dict):
+                                    return "bullets 元素必须是对象"
+                    return None
+                bad = shape_bad()
+                if bad:
+                    return self._json({"ok": False, "error": "拒绝保存：" + bad}, 400)
+                d = doc
+                try:
+                    prev_meta = read_doc(body["name"]).get("meta") or {}
+                except Exception:
+                    prev_meta = {}
+                m = d.setdefault("meta", {})
+                # exportedAt 由服务端独占保管：客户端内存里的 doc 可能不含它，保存不能抹掉导出记录
+                if not m.get("exportedAt") and prev_meta.get("exportedAt"):
+                    m["exportedAt"] = prev_meta["exportedAt"]
+                m["savedAt"] = datetime.now().isoformat(timespec="seconds")
+                write_doc(body["name"], d)
                 return self._json({"ok": True})
 
             if parsed.path == "/api/delete":

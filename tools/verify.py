@@ -59,7 +59,7 @@ RESULTS = []           # (section, name, status, evidence)
 SERVER_NOTE = ""       # 服务复用/旧代码提示
 HTTPD = None           # 本脚本 in-process 起的服务（只 shutdown 自己起的）
 EXTERNAL_REVIVED = False  # 本轮把陈旧的外部 8618 服务替换成了 in-process：收尾时负责把工作台拉回来
-EXPECTED_APIV = 2      # 期望的 serve.py API 协议版本（改 serve.py 行为时同步 bump 两边；旧进程无此字段=陈旧）
+EXPECTED_APIV = 3      # 期望的 serve.py API 协议版本（改 serve.py 行为时同步 bump 两边；旧进程无此字段=陈旧）
 
 
 def add(section, name, status, evidence=""):
@@ -617,6 +617,34 @@ def sec_api(server_ok):
             % (t1, t2, t1, t3, t4, t5, st))
     except Exception as e:
         add("API", "加固边界", "FAIL", "异常: %s" % e)
+
+    # d2b) 保存形状校验（R43）：畸形 doc 在写盘前被 400 拒绝、原档毫发无损、合法保存不受影响
+    try:
+        full_sv = "jobs/verify-tmp-sv-" + TS
+        http_req("POST", "/api/newjob", {"name": "verify-tmp-sv-" + TS})
+        st, base_doc = get_doc(full_sv)
+        probes = [
+            ({"name": full_sv, "doc": None}, "doc=null"),
+            ({"name": full_sv, "doc": "garbage"}, "doc=字符串"),
+            ({"name": full_sv, "doc": {"sections": "oops"}}, "sections=字符串"),
+            ({"name": full_sv, "doc": {"sections": [{"entries": [{"bullets": [1, 2]}]}]}}, "bullets=数字数组"),
+            ({"name": full_sv, "doc": {"meta": [1], "sections": []}}, "meta=数组"),
+        ]
+        allrej = True
+        for payload, tag in probes:
+            st, _b = http_req("POST", "/api/save", payload, timeout=10)
+            if st != 400:
+                allrej = False
+                note("形状校验漏放: %s http=%s" % (tag, st))
+        st, after = get_doc(full_sv)
+        intact = st == 200 and after == base_doc
+        st, _b = http_req("POST", "/api/save", {"name": full_sv, "doc": base_doc})
+        good = st == 200 and tryjson(_b).get("ok") is True
+        sv_ok = allrej and intact and good
+        add("API", "保存形状校验", "PASS" if sv_ok else "FAIL",
+            "5 种畸形全 400=%s 原档无损=%s 合法保存=%s" % (allrej, intact, good))
+    except Exception as e:
+        add("API", "保存形状校验", "FAIL", "异常: %s" % e)
 
     # d3) 漂移锚点（R30）：新副本 meta 带 masterAt，且不晚于主简历当前 savedAt（新建副本无假漂移）
     try:
@@ -1725,13 +1753,14 @@ def sec_headless():
 
     EDGE = find_edge()
     if not EDGE:
-        for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+        for c in ["create", "bold", "ai-apply", "ai-applyall",
+                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
     refresh_server_if_stale()
     DRIVE.write_text(DRIVER_TMPL, encoding="utf-8")
+    run_edge_once(EDGE, BASE + "/app/index.html?nointro=1")  # 预热：冷启动的首次 Edge 会拖慢首个用例造成假失败（R43 观察）
     MASTER_SNAP = backup(MASTER)                      # 主简历零污染守卫基线
     FULL_P = "jobs/verify-ui-" + TS + "-p"            # ai-request / ai-steps 用的一次性副本
 
