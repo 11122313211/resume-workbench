@@ -380,3 +380,7 @@ body.splitting { cursor: col-resize; user-select: none; }
   font-size: 11.5px; cursor: pointer; color: #66707e; white-space: nowrap; }
 .stats-tab:hover { background: #f4f6fa; }
 .stats-tab.on { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+/* ===== 一览表头排序（R46）：可点表头 + 当前排序列高亮 ===== */
+.stats-table th.sort-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.stats-table th.sort-th:hover { color: #222; }
+.stats-table th.sort-th.on { color: #2f6fed; }

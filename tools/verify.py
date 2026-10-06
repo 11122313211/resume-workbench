@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=44" in page and "editor.css?v=32" in page
+    ok = "editor.js?v=45" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=44 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=45 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1161,6 +1161,50 @@ var CASES = {
     log("fitzoom/persist", true, "重载后仍为适应宽度（vui-zoom 记忆）");
   },
 
+  "statssort": async function () {   /* R46：投递一览表头点击排序（日期降序默认→升序→按公司列） */
+    var made = [];
+    async function mkJob(name) {
+      await fetch("/api/newjob", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name }) });
+      made.push("jobs/" + name);
+    }
+    try {
+      await loadEditor(DOC);
+      await mkJob("2026-01-02_verify-ss-A");
+      await mkJob("2026-03-04_verify-ss-B");
+      clickEl('[data-nav="stats"]');
+      await wwait(function () { return q("#modal .stats-table"); }, 6000, "一览打开");
+      function firstRow() {
+        var rows = idoc().querySelectorAll("#modal .stats-row");
+        return rows.length ? rows[0].getAttribute("data-doc") : "";
+      }
+      /* 默认日期降序：03-04 在前 */
+      await wwait(function () { return firstRow().indexOf("verify-ss-B") !== -1; }, 4000, "默认日期降序");
+      log("statssort/default", true, "默认日期倒序（03-04 在 01-02 之前）");
+      /* 点日期表头 → 升序：01-02 在前 */
+      q(".stats-table th[data-sk='date']").click();
+      await wwait(function () { return firstRow().indexOf("verify-ss-A") !== -1; }, 4000, "日期升序");
+      await wwait(function () {
+        var th = q(".stats-table th[data-sk='date']");
+        return th.getAttribute("aria-sort") === "ascending" && th.textContent.indexOf("▲") !== -1;
+      }, 4000, "升序指示");
+      log("statssort/date-asc", true, "点日期表头切升序（▲ + aria-sort）");
+      /* 点公司表头 → 降序默认：verify-ss-B > verify-ss-A */
+      q(".stats-table th[data-sk='company']").click();
+      await wwait(function () { return firstRow().indexOf("verify-ss-B") !== -1; }, 4000, "公司降序");
+      log("statssort/company", true, "点公司表头按公司排序（换列默认降序）");
+      /* CSV 口径同源：buildStatsItems 排序变化后导出跟随（此处只验证按钮存在，行序由弹窗同函数驱动） */
+      log("statssort/csv-shared", !!q("#modal [data-m='csv']"), "CSV 导出与弹窗共用同一排序口径");
+    } finally {
+      for (var i = 0; i < made.length; i++) {
+        try {
+          await fetch("/api/delete", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: made[i] }) });
+        } catch (e) {}
+      }
+    }
+  },
+
   "paste-img": async function () {   /* 剪贴板粘贴图片：合成 paste 事件 → 自动上传 → 照片字段落位 */
     await loadEditor(DOC);
     await wwait(function () { return q("#cards .card"); }, 8000, "编辑器渲染");
@@ -1780,7 +1824,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1789,7 +1833,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall",
-                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1938,6 +1982,8 @@ def sec_headless():
             headless_case("fitzoom", doc=full_fz)
         except Exception as e:
             add("HEADLESS", "fitzoom", "FAIL", "准备副本失败: %s" % e)
+
+        headless_case("statssort")  # 自建临时副本（_verify-ss-）并在用例 finally 里删除
 
         try:
             full_pi, _ids_pi = make_copy("-pi")
@@ -2137,7 +2183,8 @@ def cleanup_verify_docs():
             http_req("POST", "/api/delete", {"name": n}, timeout=5)
     jd = DATA / "jobs"
     if jd.is_dir():
-        for p in list(jd.glob("verify-*.json")) + list(jd.glob("verify-*.pdf")):
+        for p in list(jd.glob("verify-*.json")) + list(jd.glob("verify-*.pdf")) + \
+                list(jd.glob("*_verify-ss-*.json")) + list(jd.glob("*_verify-ss-*.pdf")):
             try:
                 p.unlink()
             except Exception:

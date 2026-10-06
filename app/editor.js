@@ -385,6 +385,17 @@ function exportByName(name) { // 一览行内一键导出（R34）：跳到该�
   }).catch(function () { toast("打开副本失败：" + name.replace(/^jobs\//, "")); });
 }
 var statsData = null, statsFilter = ""; // 一览数据快照与当前投递状态筛选（R36：筛选切换就地重建，不重新请求）
+var statsSort = { key: "date", dir: "desc" }; // 表头排序（R46）：默认日期倒序=最新投递在前，与 R34 行为一致
+function statSortVal(it) {
+  switch (statsSort.key) {
+    case "company": return it.company;
+    case "role": return it.role;
+    case "st": return { "已导出": 0, "改过未重导": 1, "未导出": 2 }[it.st];
+    case "exp": return it.exp;
+    case "dv": return DELIV_ST.indexOf(it.dv.st || "未投");
+    default: return it.date === "—" ? "" : it.date; // date：无日期副本沉底
+  }
+}
 function showStats() {
   closeModal();
   getJSON("/api/list").then(function (r) { statsData = r; renderStats(); })
@@ -407,11 +418,14 @@ function buildStatsItems(r) { // 一览行数据（R37 从 renderStats 抽出）
     return { n: n, date: date, company: company, role: role, st: st, cls: cls,
              exp: (m.exportedAt || "").replace("T", " ").slice(0, 16) || "—", dv: dlv[n] || {} };
   });
-  items.sort(function (a, b) { // 最新投递在前，无日期副本（老文档/测试副本）排最后
-    if (a.date === b.date) return 0;
-    if (a.date === "—") return 1;
-    if (b.date === "—") return -1;
-    return a.date < b.date ? 1 : -1;
+  var d = statsSort.dir === "asc" ? 1 : -1;
+  items.sort(function (a, b) { // 表头排序（R46）：中文走 localeCompare；无值（无日期/占位—）升降序都沉底
+    var va = statSortVal(a), vb = statSortVal(b);
+    var ea = va === "" || va == null, eb = vb === "" || vb == null;
+    if (ea !== eb) return ea ? 1 : -1;
+    if (va === vb) return 0;
+    if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb), "zh") * d;
+    return va < vb ? -d : d;
   });
   return items;
 }
@@ -459,8 +473,14 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
       "\" title=\"跳到该副本并走标准导出（含交付体检）\">" + (it.st === "改过未重导" ? "⬇ 重导" : "⬇ 导出") + "</button>" : "") + "</td></tr>";
   }).join("");
   var body;
-  if (rows) body = "<table class='stats-table'><thead><tr><th>日期</th><th>公司</th><th>岗位</th><th>导出状态</th><th>导出时间</th><th>投递状态</th><th></th></tr></thead><tbody>" +
-      rows + "</tbody></table><p class='ob-tip'>点行跳到对应副本，点状态胶囊推进投递进度（未投→已投→面试→通过→挂）；「改过未重导」= 导出后又编辑过，点 ⬇ 重导即补最新版（主简历不计入投递）</p>";
+  var ths = [["date", "日期"], ["company", "公司"], ["role", "岗位"], ["st", "导出状态"], ["exp", "导出时间"], ["dv", "投递状态"]].map(function (t) {
+    var on = statsSort.key === t[0];
+    return "<th class='sort-th" + (on ? " on" : "") + "' data-sk='" + t[0] +
+      "' title=\"点击按此列排序（再点切换升/降序）\" aria-sort='" + (on ? (statsSort.dir === "asc" ? "ascending" : "descending") : "none") + "'>" +
+      t[1] + (on ? (statsSort.dir === "asc" ? " ▲" : " ▼") : "") + "</th>";
+  }).join("");
+  if (rows) body = "<table class='stats-table'><thead><tr>" + ths + "<th></th></tr></thead><tbody>" +
+      rows + "</tbody></table><p class='ob-tip'>点行跳到对应副本，点状态胶囊推进投递进度（未投→已投→面试→通过→挂）；点表头按列排序，再点切换升/降序；「改过未重导」= 导出后又编辑过，点 ⬇ 重导即补最新版（主简历不计入投递）</p>";
   else body = "<div class='ai-empty'>" + (items.length ? "没有「" + esc(statsFilter) + "」状态的副本" :
       "还没有岗位副本。左侧「＋新建岗位副本」创建后，这里会汇总各份的导出状态") + "</div>";
   var ov = document.createElement("div");
@@ -474,6 +494,14 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
     if (e.target === ov || a === "no") { ov.remove(); return; }
     if (a === "new") { ov.remove(); var nb = document.querySelector('[data-nav="newjob"]'); if (nb) nb.click(); return; }
     if (a === "csv") { downloadDeliveryCsv(); return; }
+    var th = e.target.closest && e.target.closest(".sort-th");
+    if (th) { // 表头排序（R46）：同列再点切换升/降序，换列默认降序；就地重建不重新请求
+      var sk = th.getAttribute("data-sk");
+      if (statsSort.key === sk) statsSort.dir = statsSort.dir === "asc" ? "desc" : "asc";
+      else { statsSort.key = sk; statsSort.dir = "desc"; }
+      renderStats();
+      return;
+    }
     var tab = e.target.closest && e.target.closest(".stats-tab");
     if (tab) { statsFilter = tab.getAttribute("data-sf") || ""; renderStats(); return; } // 筛选切换就地重建
     var ex = e.target.closest && e.target.closest(".stats-export");
