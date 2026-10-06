@@ -85,11 +85,27 @@ function applySnap(s) {
   schedulePreview();
   updateChars();
 }
+function syncAppliedAI() { // 撤销/重做后按内容事实重算「已应用」标记（R42）：标记=当前内容与建议一致，不靠应用时的记忆
+  var box = document.getElementById("ai-cards");
+  var arr = (box && box.__items) || [];
+  var marks = {};
+  arr.forEach(function (it, i) {
+    if (!it || it.type === "note") return;
+    var f = findAny(it.target || "");
+    if (!f) return;
+    if (it.type === "rewrite" && f.obj.text === it.text) marks[i] = true;
+    else if (it.type === "hide" && f.obj.hidden === true) marks[i] = true;
+    else if (it.type === "show" && f.obj.hidden === false) marks[i] = true;
+  });
+  state.appliedAI = marks;
+}
 function undo() {
   if (!undoStack.length) return;
   redoStack.push(snap());
   applySnap(undoStack.pop());
   updateUndoBtns();
+  syncAppliedAI();
+  if (!document.getElementById("ai-panel").classList.contains("ai-closed")) loadSuggestions(); // 面板开着：卡片「已应用」态即时回退
   flashOk("已撤销 ✓");
 }
 function redo() {
@@ -97,6 +113,8 @@ function redo() {
   undoStack.push(snap());
   applySnap(redoStack.pop());
   updateUndoBtns();
+  syncAppliedAI();
+  if (!document.getElementById("ai-panel").classList.contains("ai-closed")) loadSuggestions();
   flashOk("已重做 ✓");
 }
 function updateUndoBtns() { // ↶↷ 可发现性：按钮态跟随撤销栈，不用记快捷键

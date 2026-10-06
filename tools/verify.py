@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=41" in page and "editor.css?v=32" in page
+    ok = "editor.js?v=42" in page and "editor.css?v=32" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=41 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=42 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1081,6 +1081,23 @@ var CASES = {
     log("aikeys/apply", true, "键盘 1 应用第一条建议成功");
   },
 
+  "undoai": async function () {   /* R42：Ctrl+Z 撤销 AI 应用后，「已应用」标记按内容事实回退，按钮重现 */
+    await loadEditor(DOC);
+    await openPanel();
+    await wwait(function () { return q("#ai-cards .ai-card"); }, 8000, ".ai-card 渲染");
+    var ta = taOf(TARGET);
+    var orig = ta.value;
+    q("#ai-cards [data-ai='0']").click();
+    await wwait(function () { return taOf(TARGET).value === "【验证】undoai 改写文本"; }, 8000, "应用改写生效");
+    await wwait(function () { return q("#ai-cards .ai-card.applied"); }, 4000, "卡片标记已应用");
+    log("undoai/apply", true, "应用后内容与卡片标记一致");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    await wwait(function () { return taOf(TARGET).value === orig; }, 8000, "Ctrl+Z 内容回退");
+    await wwait(function () { return !q("#ai-cards .ai-card.applied"); }, 6000, "已应用标记回退");
+    await wwait(function () { return q("#ai-cards [data-ai='0']"); }, 6000, "✓ 应用按钮重现");
+    log("undoai/sync", true, "撤销后卡片恢复可应用（标记=内容事实，不再假已应用）");
+  },
+
   "paste-img": async function () {   /* 剪贴板粘贴图片：合成 paste 事件 → 自动上传 → 照片字段落位 */
     await loadEditor(DOC);
     await wwait(function () { return q("#cards .card"); }, 8000, "编辑器渲染");
@@ -1700,7 +1717,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1709,7 +1726,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                  "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1826,6 +1843,18 @@ def sec_headless():
             headless_case("aikeys", prepare=prep_keys, doc=full_k, target=k1)
         except Exception as e:
             add("HEADLESS", "aikeys", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_ua, ids_ua = make_copy("-ua")
+            t_ua = ids_ua[0] if ids_ua else "b-edu1"
+
+            def prep_ua():
+                make_copy("-ua")
+                write_suggestion({"for": full_ua, "items": [
+                    {"type": "rewrite", "target": t_ua, "text": "【验证】undoai 改写文本", "reason": "r"}]})
+            headless_case("undoai", prepare=prep_ua, doc=full_ua, target=t_ua)
+        except Exception as e:
+            add("HEADLESS", "undoai", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_pi, _ids_pi = make_copy("-pi")
