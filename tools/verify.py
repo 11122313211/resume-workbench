@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=50" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=51" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=50 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=51 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -865,6 +865,18 @@ var CASES = {
     btn.click();
     /* 全选加粗时 wrapBold 按算法溶解了选区内已有 ** 构造，故拆掉外层后=去粗文本，非原文 */
     log("bold/full-unwrap", ta.value === orig.replace(/\*\*/g, ""), "全选加粗再点拆掉外层标记");
+    /* R55：Ctrl+B 只作用于成果行——JD 框不再被偷偷插 **，成果行内快捷键与按钮同一路 */
+    var jd = q("#ai-jd");
+    var jdOrig = "岗位 JD 原文：验证 Ctrl+B 不改写这里";
+    jd.value = jdOrig;
+    jd.focus(); jd.setSelectionRange(0, 6);
+    jd.dispatchEvent(new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true }));
+    log("bold/jd-guard", jd.value === jdOrig, "JD 框 Ctrl+B 原文未动（快捷键只认成果行）");
+    ta.focus(); ta.setSelectionRange(0, 4);
+    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true }));
+    var v4 = ta.value;
+    log("bold/ctrl-b", v4.slice(0, 2) === "**" && v4.slice(2, 6) === orig.slice(0, 4) && v4.slice(6, 8) === "**",
+      "成果行内 Ctrl+B 仍然加粗（键盘与按钮同一路）");
   },
 
   "ai-apply": async function () {

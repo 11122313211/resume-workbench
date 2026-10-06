@@ -1717,7 +1717,7 @@ function uploadPhotoBlob(blob, ext) {
     else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
     else if (k === "j") { e.preventDefault(); toggleAIPanel(); }
     else if (k === "f" && !document.getElementById("modal")) { e.preventDefault(); openFind(); } // 文档内查找（弹窗开着不穿透开查找条，Esc 层序以弹窗为顶）
-    else if (k === "b" && e.target && e.target.tagName === "TEXTAREA") { e.preventDefault(); toggleBold(e.target); }
+    else if (k === "b" && e.target && e.target.tagName === "TEXTAREA" && e.target.getAttribute("data-k") === "bullet") { e.preventDefault(); toggleBold(e.target); } // Ctrl+B 只在成果行生效（R55）：JD 框等其余 textarea 不被偷偷插 **
   });
 
   /* AI 抽屉：三步闭环（贴 JD → 发起即复制 → agent 运行后建议自动出现）+ 全部应用（开关走侧栏/Ctrl+J） */
