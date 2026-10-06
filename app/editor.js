@@ -372,9 +372,7 @@ function showStats() {
   getJSON("/api/list").then(function (r) { statsData = r; renderStats(); })
     .catch(function () { toast("读取投递状态失败：本地服务可能没在运行"); });
 }
-function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
-  closeModal();
-  var r = statsData || {};
+function buildStatsItems(r) { // 一览行数据（R37 从 renderStats 抽出）：文档列表 → 日期/公司/岗位/导出状态/投递状态；弹窗与 CSV 导出共用同一口径
   var meta = r.meta || {};
   var dlv = r.delivery || {};
   var items = (r.docs || []).filter(function (n) { return n !== "主简历"; }).map(function (n) {
@@ -397,6 +395,33 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
     if (b.date === "—") return -1;
     return a.date < b.date ? 1 : -1;
   });
+  return items;
+}
+function csvCell(v) { // CSV 单元格转义：含逗号/引号/换行时整体加引号，内部引号翻倍
+  v = String(v == null ? "" : v);
+  return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function buildDeliveryCsv(items) { // 台账导出（R37）：一览行 → CSV 文本；开头的 UTF-8 BOM 让 Excel 正确识别中文
+  var lines = [["文件名", "日期", "公司", "岗位", "导出状态", "导出时间", "投递状态"].join(",")].concat(items.map(function (it) {
+    return [csvCell(it.n), csvCell(it.date), csvCell(it.company), csvCell(it.role),
+            csvCell(it.st), csvCell(it.exp), csvCell(it.dv.st || "未投")].join(",");
+  }));
+  return "\uFEFF" + lines.join("\r\n");
+}
+function downloadDeliveryCsv() { // 所见即所得：按当前筛选导出台账（全部 / 某个投递状态）
+  if (!statsData) return;
+  var shown = buildStatsItems(statsData).filter(function (it) {
+    return statsFilter === "" || (it.dv.st || "未投") === statsFilter;
+  });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([buildDeliveryCsv(shown)], { type: "text/csv;charset=utf-8" }));
+  a.download = "投递台账-" + new Date().toISOString().slice(0, 10) + ".csv";
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000); // 下载启动后回收 objectURL
+}
+function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
+  closeModal();
+  var items = buildStatsItems(statsData || {});
   var chips = "<button class='stats-tab" + (statsFilter === "" ? " on" : "") + "' data-sf=''>全部 " + items.length + "</button>" +
     DELIV_ST.map(function (s) {
       var c = 0;
@@ -423,12 +448,13 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
   ov.className = "modal-ov"; ov.id = "modal";
   ov.innerHTML = "<div class='modal modal-wide'><div class='m-title'>📊 投递一览</div>" +
     "<div class='stats-tabs'>" + chips + "</div>" + body +
-    "<div class='m-row'><button class='btn' data-m='new'>＋ 新建岗位副本</button><button class='btn' data-m='no'>关闭</button></div></div>";
+    "<div class='m-row'><button class='btn' data-m='new'>＋ 新建岗位副本</button><button class='btn' data-m='csv' title=\"把当前台账（含筛选结果）存为 CSV，可直接用 Excel 打开\">⬇ 导出 CSV</button><button class='btn' data-m='no'>关闭</button></div></div>";
   document.body.appendChild(ov);
   ov.addEventListener("click", function (e) {
     var a = e.target.getAttribute && e.target.getAttribute("data-m");
     if (e.target === ov || a === "no") { ov.remove(); return; }
     if (a === "new") { ov.remove(); var nb = document.querySelector('[data-nav="newjob"]'); if (nb) nb.click(); return; }
+    if (a === "csv") { downloadDeliveryCsv(); return; }
     var tab = e.target.closest && e.target.closest(".stats-tab");
     if (tab) { statsFilter = tab.getAttribute("data-sf") || ""; renderStats(); return; } // 筛选切换就地重建
     var ex = e.target.closest && e.target.closest(".stats-export");
@@ -1030,6 +1056,21 @@ function flushSave() { // 立即落盘挂起的修改（切文档/删除前调�
   var p = pendingSave; pendingSave = null;
   doSave(p.name, p.doc);
 }
+function flushOnHide(force) { // 关页/切走兜底（R37）：900ms 防抖窗口内直接关页会丢最后一批修改，这里强制立即落盘
+  if (!pendingSave) return;
+  var p = pendingSave; pendingSave = null;
+  clearTimeout(saveTimer); saveTimer = null;
+  if ((force || document.visibilityState === "hidden") && navigator.sendBeacon) {
+    try { // 卸载过程中的 fetch 会被浏览器取消，sendBeacon 不随页面卸载取消
+      if (navigator.sendBeacon("/api/save", new Blob([JSON.stringify(p)], { type: "application/json" }))) {
+        flashOk("✓ 已保存"); return;
+      }
+    } catch (e) { /* sendBeacon 不可用则落回 doSave */ }
+  }
+  doSave(p.name, p.doc);
+}
+window.addEventListener("beforeunload", function () { flushOnHide(true); });
+document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") flushOnHide(true); });
 function pushPreview() {
   var f = document.getElementById("preview");
   if (!f.contentWindow) return;

@@ -322,9 +322,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=36" in page and "editor.css?v=32" in page
+    ok = "editor.js?v=37" in page and "editor.css?v=32" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=36 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=37 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -372,7 +372,7 @@ def sec_static():
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
                "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "showPhotoZoom",
                "showStats", "renderStats", "cycleDeliv", "exportByName", "openFind", "updateStatsBadge",
-               "cycleDoc", "masterAt", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
+               "cycleDoc", "masterAt", "flushOnHide", "buildDeliveryCsv", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
         "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
@@ -380,7 +380,7 @@ def sec_static():
     rd = read_text(ROOT / "README.md")
     marks = ["Alt+↑↓", "Ctrl+S", "Ctrl+E", "Ctrl+J", "交付体检", "历史备份", "导出状态点",
              "主简历漂移提示", "✎ 改名", "🤖", "T 取舍模式", "1-9", "投递一览", "投递状态", "一键导出", "Ctrl+F",
-             "琥珀数字徽标", "按投递状态筛选"]
+             "琥珀数字徽标", "按投递状态筛选", "导出 CSV"]
     miss = [x for x in marks if x not in rd]
     add("STATIC", "README 手册契约", "PASS" if not miss else "FAIL",
         "键位表与功能入口描述全部在位（手册=实现）" if not miss else "缺: " + ",".join(miss))
@@ -1198,6 +1198,45 @@ var CASES = {
     log("statsfilter/allback", true, "切回全部视图行恢复");
   },
 
+  "flushhide": async function () {  /* 关页兜底（R37）：输入后不等 900ms 防抖，flushOnHide 立即落盘 → 服务端回读已是新内容 */
+    await loadEditor(DOC);
+    var ta = await wwait(function () { return q("#cards .bullet-row textarea"); }, 8000, "卡片渲染");
+    ta.value = "关页兜底验证词R37qK4m";
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    iw().flushOnHide();               // 模拟“输入后立刻关页”：flushOnHide 自身会取消 900ms 计时器，此后服务端若收到新内容只可能来自兜底路径
+    var hit = false;
+    for (var i = 0; i < 40 && !hit; i++) {      // 直接以服务端为准：GET /api/doc 回读
+      await sleep(200);
+      try {
+        var r = await fetch("/api/doc?name=" + encodeURIComponent(DOC), { cache: "no-store" });
+        var d = await r.json();
+        hit = JSON.stringify(d).indexOf("关页兜底验证词R37qK4m") !== -1;
+      } catch (e) { /* 服务未就绪则继续轮询 */ }
+    }
+    log("flushhide/persisted", hit, "输入后立即 flushOnHide，服务端回读已是新内容（900ms 计时器已被打断，不走兜底就收不到）");
+    log("flushhide/no-pending", iw().pendingSave === null, "pendingSave 已清空，无挂起残留");
+  },
+
+  "csvex": async function () {      /* 台账 CSV（R37）：构建 CSV → BOM/表头/行数与副本一致 → 特殊字符转义 → 弹窗按钮在位 */
+    await loadEditor("");
+    await wwait(function () { return idoc().querySelectorAll("#rail-docs .rail-row").length >= 1; }, 8000, "列表渲染");
+    var csv = "";
+    await wwait(function () {
+      if (!iw().statsData) { iw().showStats(); return false; }   // showStats 拉取 /api/list 存入 statsData
+      csv = iw().buildDeliveryCsv(iw().buildStatsItems(iw().statsData));
+      return !!csv;
+    }, 9000, "构建台账 CSV");
+    var lines = csv.replace(/^\uFEFF/, "").split("\r\n");
+    var jobs = iw().statsData.docs.length - 1;   // 主简历不计入投递
+    log("csvex/bom", csv.charAt(0) === "\uFEFF", "UTF-8 BOM 在位（Excel 中文不乱码）");
+    log("csvex/head", lines[0] === "文件名,日期,公司,岗位,导出状态,导出时间,投递状态", "表头列序固定");
+    log("csvex/rows", lines.length === jobs + 1, "数据行 " + (lines.length - 1) + " = 副本数 " + jobs + "（主简历不计入）");
+    var qcsv = iw().buildDeliveryCsv([{ n: 'a"b,c', date: "2026-01-01", company: "x", role: "y", st: "已导出", exp: "—", dv: {} }]);
+    log("csvex/quote", qcsv.split("\r\n")[1].indexOf('"a""b,c"') !== -1, "含逗号/引号的单元格正确转义");
+    var btn = iw().document.querySelector("#modal [data-m='csv']");
+    log("csvex/button", !!btn, "一览弹窗底栏「⬇ 导出 CSV」按钮在位");
+  },
+
   "chipjump": async function () {   /* 「已隐藏 N」chip 点击：进取舍模式并定位第一个隐藏行 */
     await loadEditor(DOC);
     function press(key) {
@@ -1756,6 +1795,18 @@ def sec_headless():
             headless_case("statsfilter", prepare=prep_sfl, doc=full_sf, target=full_s2)
         except Exception as e:
             add("HEADLESS", "statsfilter", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_fh, _ids_fh = make_copy("-fh")
+            headless_case("flushhide", doc=full_fh)
+        except Exception as e:
+            add("HEADLESS", "flushhide", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_cx, _ids_cx = make_copy("-cx")
+            headless_case("csvex", doc=full_cx)
+        except Exception as e:
+            add("HEADLESS", "csvex", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_cj, _ids_cj = make_copy("-cj")

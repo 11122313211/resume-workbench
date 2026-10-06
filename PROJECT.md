@@ -65,13 +65,20 @@ python tools/verify.py
 
 1. **STATIC**：serve.py 可编译、资源版本参数一致、加粗算法两边同源、数据文件可解析；
 2. **API**：列表/新建副本/保存回读与自动留底/删除/主简历禁删/AI 请求写入与旧建议归档/**导出 E2E（真实 Edge 打印 → %PDF 头 + A4 MediaBox）**/**照片上传与扩展名白名单**；
-3. **HEADLESS UI**（Edge `--dump-dom` + 驱动页）：新建副本全链路、副本改名、导出状态点三态、备份恢复弹窗、加粗切换、AI 建议应用/全部应用/撤销、建议就绪徽标、错文档与坏格式诚实报错、发起-等待-取消状态机、⋯ 菜单与隐藏压缩、保存反馈就地化。
+3. **HEADLESS UI**（Edge `--dump-dom` + 驱动页）：新建副本全链路、副本改名、导出状态点三态、备份恢复弹窗、加粗切换、AI 建议应用/全部应用/撤销、建议就绪徽标、错文档与坏格式诚实报错、发起-等待-取消状态机、⋯ 菜单与隐藏压缩、保存反馈就地化、关页兜底落盘、投递一览/筛选/一键导出/CSV。
 
 何时跑：任何 `app/` 或 `serve.py` 改动之后、提交之前。注意事项：verify 会用 `verify-tmp-*` / `verify-ui-*` 前缀的一次性副本做实验并在结束时清理，用户的 `ai-request.json` / `ai-suggestion.json` 会字节级备份还原；本次运行新增的 `ai-history` 归档与 `.backup` 备份也会被清理，用户自己的不动。
 
 **提交闸门（机制强制，两道按序）**：`tools/hooks/pre-commit` 经 `git config core.hooksPath tools/hooks` 启用——① **隐私闸门**：暂存区含 `data/` 变更即拒绝（真实简历数据绝不入库；`VERIFY_ALLOW_DATA=1` 为维护者显式放行）；② **静态门禁**：`python tools/verify.py --static`（秒级，STATIC 层：可编译/版本联动/算法同源/数据可解析）——静态契约不过，提交被阻止。动态三层（API/无头 UI）仍需提交前人工全量运行。临时绕过：`git commit --no-verify`。快速验证某次改动：`python tools/verify.py --static`。
 
 ## 5. 迭代记录
+
+### R37 · 2026-10-06 · 数据安全兜底 + 台账可携带：关页 flushOnHide + 投递一览导出 CSV
+
+- **提出**：两处使用摩擦同属「最后一步不可靠/不可带走」。① 保存是 900ms 防抖 + fetch——输入后立刻关标签页/刷新，最后一批修改落在防抖窗口里直接丢失（这是自动保存机制最后一个已知数据丢失窗口，尤其手打成果文本时疼）；② 📊 投递台账只能看不能带走——想贴进 Excel/周报只能对着表格手抄。
+- **开发**：① `flushOnHide(force)`：pendingSave 非空即强制落盘——hidden/卸载场景走 `navigator.sendBeacon`（不随页面卸载取消，/api/save 同形 `{name, doc}` 零服务端改动，成功则就地 flashOk），显式调用/不可用时落回 doSave；挂 beforeunload + visibilitychange(hidden)，beacon 分支顺带打断 900ms 计时器避免双发；② renderStats 里的行构建抽出为 `buildStatsItems(r)`（弹窗与 CSV 共用同一口径）；③ `csvCell` 转义（逗号/引号/换行）+ `buildDeliveryCsv`（UTF-8 BOM，Excel 中文不乱码）+ `downloadDeliveryCsv`（所见即所得：含当前筛选，objectURL 用后回收）；一览弹窗底栏加「⬇ 导出 CSV」。
+- **验证**：全量 55 项全绿（新增 HEADLESS `flushhide`：输入后立即 flushOnHide——该函数自身会取消 900ms 计时器，服务端 GET /api/doc 回读却已是新内容，不走兜底不可能收到；`csvex`：BOM 在位/表头列序固定/数据行数=副本数（主简历不计入）/逗号引号转义/弹窗按钮在位；STATIC 版本 v=37、锚点、README 契约同步扩版）。一次通过，零修复。注：真实 unload 中的 sendBeacon 分支无法在 --dump-dom 下断言（浏览器退出时序），由锚点 + 代码走查覆盖。
+- **结果**：数据丢失窗口清零（防抖→切档→关页全链路有兜底）；投递台账从「在线看」变成「可携带」，筛选结果即导出结果。回滚：`git revert` 单提交。
 
 ### R36 · 2026-10-05 · 投递台账收尾：📊 琥珀数字徽标 + 一览按投递状态筛选
 
