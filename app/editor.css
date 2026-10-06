@@ -384,3 +384,4 @@ body.splitting { cursor: col-resize; user-select: none; }
 .stats-table th.sort-th { cursor: pointer; user-select: none; white-space: nowrap; }
 .stats-table th.sort-th:hover { color: #222; }
 .stats-table th.sort-th.on { color: #2f6fed; }
+.stats-table th.sort-th:focus-visible { outline: 2px solid #2f6fed; outline-offset: -2px; border-radius: 4px; }

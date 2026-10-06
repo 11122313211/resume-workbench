@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=49" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=50" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=49 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=50 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1227,16 +1227,23 @@ var CASES = {
       await mkJob("2026-03-04_verify-ss-B");
       clickEl('[data-nav="stats"]');
       await wwait(function () { return q("#modal .stats-table"); }, 6000, "一览打开");
-      function firstRow() {
+      function rowIdx(name) { // 相对行序（R54 修正）：真实数据的公司名按拼音会排在 verify-* 前后，断言 A/B 相对次序才不受真实数据影响
         var rows = idoc().querySelectorAll("#modal .stats-row");
-        return rows.length ? rows[0].getAttribute("data-doc") : "";
+        for (var i = 0; i < rows.length; i++) {
+          if ((rows[i].getAttribute("data-doc") || "").indexOf(name) !== -1) return i;
+        }
+        return -1;
       }
-      /* 默认日期降序：03-04 在前 */
-      await wwait(function () { return firstRow().indexOf("verify-ss-B") !== -1; }, 4000, "默认日期降序");
+      function abOk(aFirst) { // aFirst=true：verify-ss-A 行在 verify-ss-B 行前
+        var a = rowIdx("verify-ss-A"), b = rowIdx("verify-ss-B");
+        return a !== -1 && b !== -1 && (aFirst ? a < b : b < a);
+      }
+      /* 默认日期降序：03-04 在 01-02 前 */
+      await wwait(function () { return abOk(false); }, 4000, "默认日期降序");
       log("statssort/default", true, "默认日期倒序（03-04 在 01-02 之前）");
       /* 点日期表头 → 升序：01-02 在前 */
       q(".stats-table th[data-sk='date']").click();
-      await wwait(function () { return firstRow().indexOf("verify-ss-A") !== -1; }, 4000, "日期升序");
+      await wwait(function () { return abOk(true); }, 4000, "日期升序");
       await wwait(function () {
         var th = q(".stats-table th[data-sk='date']");
         return th.getAttribute("aria-sort") === "ascending" && th.textContent.indexOf("▲") !== -1;
@@ -1244,8 +1251,16 @@ var CASES = {
       log("statssort/date-asc", true, "点日期表头切升序（▲ + aria-sort）");
       /* 点公司表头 → 降序默认：verify-ss-B > verify-ss-A */
       q(".stats-table th[data-sk='company']").click();
-      await wwait(function () { return firstRow().indexOf("verify-ss-B") !== -1; }, 4000, "公司降序");
+      await wwait(function () { return abOk(false); }, 4000, "公司降序");
       log("statssort/company", true, "点公司表头按公司排序（换列默认降序）");
+      /* R54：键盘可达——Tab 聚焦表头后回车同样触发排序 */
+      q(".stats-table th[data-sk='company']").click(); // 再点一次切升序：A 在 B 前
+      await wwait(function () { return abOk(true); }, 4000, "公司升序");
+      var dateTh = q(".stats-table th[data-sk='date']");
+      dateTh.focus();
+      dateTh.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await wwait(function () { return abOk(false); }, 4000, "回车切回日期降序（换列默认降序）");
+      log("statssort/keyboard", true, "表头可聚焦，回车触发排序（键盘可达）");
       /* CSV 口径同源：buildStatsItems 排序变化后导出跟随（此处只验证按钮存在，行序由弹窗同函数驱动） */
       log("statssort/csv-shared", !!q("#modal [data-m='csv']"), "CSV 导出与弹窗共用同一排序口径");
     } finally {

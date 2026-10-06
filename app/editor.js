@@ -486,8 +486,8 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
   var body;
   var ths = [["date", "日期"], ["company", "公司"], ["role", "岗位"], ["st", "导出状态"], ["exp", "导出时间"], ["dv", "投递状态"]].map(function (t) {
     var on = statsSort.key === t[0];
-    return "<th class='sort-th" + (on ? " on" : "") + "' data-sk='" + t[0] +
-      "' title=\"点击按此列排序（再点切换升/降序）\" aria-sort='" + (on ? (statsSort.dir === "asc" ? "ascending" : "descending") : "none") + "'>" +
+    return "<th class='sort-th" + (on ? " on" : "") + "' data-sk='" + t[0] + "' tabindex='0'" +
+      " title=\"点击或回车按此列排序（再点切换升/降序）\" aria-sort='" + (on ? (statsSort.dir === "asc" ? "ascending" : "descending") : "none") + "'>" +
       t[1] + (on ? (statsSort.dir === "asc" ? " ▲" : " ▼") : "") + "</th>";
   }).join("");
   if (rows) body = "<table class='stats-table'><thead><tr>" + ths + "<th></th></tr></thead><tbody>" +
@@ -500,6 +500,10 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
     "<div class='stats-tabs'>" + chips + "</div>" + body +
     "<div class='m-row'><button class='btn' data-m='new'>＋ 新建岗位副本</button><button class='btn' data-m='csv' title=\"把当前台账（含筛选结果）存为 CSV，可直接用 Excel 打开\">⬇ 导出 CSV</button><button class='btn' data-m='no'>关闭</button></div></div>";
   document.body.appendChild(ov);
+  ov.addEventListener("keydown", function (e) { // 表头键盘可达（R54）：Tab 聚焦后 Enter/空格触发排序
+    var th = e.target.closest && e.target.closest(".sort-th");
+    if (th && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); th.click(); }
+  });
   ov.addEventListener("click", function (e) {
     var a = e.target.getAttribute && e.target.getAttribute("data-m");
     if (e.target === ov || a === "no") { ov.remove(); return; }
