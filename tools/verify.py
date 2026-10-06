@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=46" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=47" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=46 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=47 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -402,7 +402,8 @@ def sec_static():
                "updateTimeFmt", "railFilter", "renameFlow", "startAIPoll", "setAIBadge",
                "refreshRailMeta", "openBackups", "lintDoc", "showLintModal", "showPhotoZoom",
                "showStats", "renderStats", "cycleDeliv", "exportByName", "openFind", "updateStatsBadge",
-               "cycleDoc", "masterAt", "flushOnHide", "buildDeliveryCsv", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档"]
+               "cycleDoc", "masterAt", "flushOnHide", "buildDeliveryCsv", "T 取舍模式（j/k 移动", "Alt+↑/↓ 切换文档",
+               "nativeDragBound", "modalCaptureFocus"]
     missing = [a for a in anchors if a not in js]
     add("STATIC", "交互契约标记", "PASS" if not missing else "FAIL",
         "取舍/键盘应用/JD标记/id守卫/粘贴上传/时间助手/筛选/改名/建议就绪徽标/导出状态/备份恢复/交付体检 与引导文案全部在位" if not missing else "缺失: " + ",".join(missing))
@@ -1227,6 +1228,19 @@ var CASES = {
     log("focusreturn/stats", true, "Esc 关一览后焦点仍在 📊 按钮");
   },
 
+  "lintfmt": async function () {   /* R48：联系方式格式粗查——位数离谱的电话/缺 @ 的邮箱进体检清单 */
+    await loadEditor(DOC);
+    clickEl("[data-nav='export']");
+    await wwait(function () { return q("#modal .lint-item"); }, 10000, "体检清单出现");
+    var txt = q("#modal").textContent;
+    log("lintfmt/title", q("#modal .m-title").textContent.indexOf("交付体检") !== -1, "体检弹窗打开");
+    log("lintfmt/phone", txt.indexOf("电话") !== -1 && txt.indexOf("可疑") !== -1, "位数离谱的电话被列出");
+    log("lintfmt/mail", txt.indexOf("邮箱") !== -1, "缺 @ 的邮箱被列出");
+    clickEl("#modal [data-m='no']");
+    await wwait(function () { return !q("#modal"); }, 6000, "取消后弹窗关闭");
+    log("lintfmt/cancel", true, "取消导出，清单可关");
+  },
+
   "paste-img": async function () {   /* 剪贴板粘贴图片：合成 paste 事件 → 自动上传 → 照片字段落位 */
     await loadEditor(DOC);
     await wwait(function () { return q("#cards .card"); }, 8000, "编辑器渲染");
@@ -1846,7 +1860,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1855,7 +1869,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall",
-                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -2012,6 +2026,20 @@ def sec_headless():
             headless_case("focusreturn", doc=full_fr)
         except Exception as e:
             add("HEADLESS", "focusreturn", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_lf, _ids_lf = make_copy("-lf")
+
+            def prep_lf():
+                make_copy("-lf")  # 每次尝试重建：注入格式破损的联系方式（位数离谱电话 + 缺 @ 邮箱）
+                nm = "jobs/verify-ui-" + TS + "-lf"
+                stl, dl = get_doc(nm)
+                dl["meta"]["电话"] = "123"
+                dl["meta"]["邮箱"] = "no-at-sign"
+                http_req("POST", "/api/save", {"name": nm, "doc": dl})
+            headless_case("lintfmt", prepare=prep_lf, doc=full_lf)
+        except Exception as e:
+            add("HEADLESS", "lintfmt", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_pi, _ids_pi = make_copy("-pi")

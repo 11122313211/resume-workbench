@@ -276,7 +276,13 @@ function lintDoc(doc) {
   }
   var m = doc.meta || {};
   ["姓名", "电话", "邮箱", "城市", "求职意向"].forEach(function (k) { hit(m[k], "基本信息·" + k + "："); });
-  if (!String(m.电话 || "").trim() && !String(m.邮箱 || "").trim()) issues.push("基本信息缺联系方式（电话/邮箱都为空）");
+  var phone = String(m.电话 || "").trim(), mail = String(m.邮箱 || "").trim();
+  if (!phone && !mail) issues.push("基本信息缺联系方式（电话/邮箱都为空）");
+  else { // 格式粗查（R48）：只拦明显破损（位数离谱/缺 @），不做正则审判，宁缺勿滥
+    var digits = phone.replace(/\D/g, "");
+    if (phone && (digits.length < 6 || digits.length > 15)) issues.push("基本信息·电话：数字位数 " + digits.length + " 可疑（常见 6~15 位）");
+    if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) issues.push("基本信息·邮箱：格式不像有效邮箱（缺 @ 或域名）");
+  }
   (doc.sections || []).forEach(function (s) {
     if (s.hidden) return;
     hit(s.标题, "章节标题：");
@@ -944,7 +950,9 @@ function initSortables() {
       { handle: "[data-dragk='bullet']", draggable: ".bullet-row", group: "bullet" })));
   });
 }
-function initNativeDrag() { // 原生 HTML5 DnD 兜底（含边缘自动滚动）
+function initNativeDrag() { // 原生 HTML5 DnD 兜底（含边缘自动滚动）；只绑一次（renderCards 每次重建都会调到 initSortables，重复绑定会导致一次 drop 触发多次 syncOrderFromDOM）
+  if (state.nativeDragBound) return;
+  state.nativeDragBound = true;
   var cards = document.getElementById("cards");
   var dragInfo = null;
   cards.addEventListener("dragstart", function (e) {
