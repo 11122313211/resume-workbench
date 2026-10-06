@@ -99,6 +99,37 @@ function syncAppliedAI() { // 撤销/重做后按内容事实重算「已应用�
   });
   state.appliedAI = marks;
 }
+function aiApplicable(arr) { // 「全部应用」工具条口径（R44 定，R56 抽出共用）：存在真实可应用且尚未应用的建议
+  return arr.some(function (it, i) {
+    if (!it || it.type === "note" || state.appliedAI[i]) return false;
+    var f = findAny(it.target || "");
+    return !!f && (it.type !== "rewrite" || f.kind === "bullet");
+  });
+}
+function repaintAppliedAI() { // 手动编辑后就地刷新「已应用」徽标（R56）：不重建卡片，滚动位置与差异视图不被打断
+  var box = document.getElementById("ai-cards");
+  var arr = (box && box.__items) || [];
+  if (!box || !arr.length) return;
+  var cards = box.querySelectorAll(".ai-card");
+  arr.forEach(function (it, i) {
+    var c = cards[i];
+    if (!c || !it || it.type === "note") return;
+    var applied = !!state.appliedAI[i];
+    c.classList.toggle("applied", applied);
+    var btn = c.querySelector(".apply-btn"), note = c.querySelector(".applied-note");
+    if (applied && btn) {
+      btn.remove();
+      c.insertAdjacentHTML("beforeend", "<span class='applied-note'>（已应用）</span>");
+    } else if (!applied && !btn && note) {
+      note.remove();
+      c.insertAdjacentHTML("beforeend", "<button class='btn small apply-btn' data-ai='" + i + "'>✓ 应用</button>");
+      var nb = c.querySelector(".apply-btn");
+      if (nb) nb.addEventListener("click", function () { aiApply(i); });
+    }
+  });
+  var toolbar = document.getElementById("ai-toolbar");
+  if (toolbar) toolbar.classList.toggle("hidden", !aiApplicable(arr));
+}
 function undo() {
   if (!undoStack.length) return;
   redoStack.push(snap());
@@ -1173,6 +1204,8 @@ function afterChange(structural, force) {
   updateChars();
   updateJdMarks();
   updateTimeFmt(); // 手打时间实时校验提示
+  syncAppliedAI(); // 内容事实变化 → 按事实重算「已应用」标记（R56）：徽标=当前内容，不靠应用时的记忆
+  if (!document.getElementById("ai-panel").classList.contains("ai-closed")) repaintAppliedAI(); // 面板开着：徽标与工具条就地跟进
   if (findOpen() && findState.q) findScan(findState.q); // 查找条开着时编辑内容 → 命中实时重扫，计数不说谎
 }
 
@@ -2038,11 +2071,8 @@ function loadSuggestions() {
     endAIWait("发起 AI 优化");
     markAISeen(); // 渲染给用户看了：记已读，徽标/提醒不再重复
     box.__items = arr;
-    var applicable = arr.some(function (it, i) {
-      if (!it || it.type === "note" || state.appliedAI[i]) return false;
-      var f = findAny(it.target || "");
-      return !!f && (it.type !== "rewrite" || f.kind === "bullet"); // 全部应用工具条只认真实可应用的建议（R44）
-    });
+    syncAppliedAI(); // 渲染前按内容事实重算「已应用」（R56）：面板关着期间的手动编辑不再留陈旧徽标
+    var applicable = aiApplicable(arr);
     toolbar.classList.toggle("hidden", !applicable);
     if (count) count.textContent = arr.length + " 条建议";
     box.innerHTML = arr.map(function (it, i) {
@@ -2066,7 +2096,7 @@ function loadSuggestions() {
         (target ? "对象：" + esc(objText.slice(0, 40)) + "<br>" : "") +
         diffHtml +
         (it.type !== "rewrite" ? "<div>" + body.replace(/\n/g, "<br>") + "</div>" : "") +
-        (it.type !== "note" && !applied ? "<button class='btn small apply-btn' data-ai='" + i + "'>✓ 应用</button>" : applied ? "（已应用）" : "") +
+        (it.type !== "note" && !applied ? "<button class='btn small apply-btn' data-ai='" + i + "'>✓ 应用</button>" : applied ? "<span class='applied-note'>（已应用）</span>" : "") +
         "</div>";
     }).join("");
     $("[data-ai]", box).forEach(function (b) {

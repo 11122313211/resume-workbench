@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=51" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=52" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=51 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=52 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1189,6 +1189,35 @@ var CASES = {
     await wwait(function () { return !q("#ai-cards .ai-card.applied"); }, 6000, "已应用标记回退");
     await wwait(function () { return q("#ai-cards [data-ai='0']"); }, 6000, "✓ 应用按钮重现");
     log("undoai/sync", true, "撤销后卡片恢复可应用（标记=内容事实，不再假已应用）");
+  },
+
+  "marksync": async function () {   /* R56：AI「已应用」标记跟随内容事实——手动改写就地回退徽标，面板关着期间的编辑重开也不残留 */
+    await loadEditor(DOC);
+    await openPanel();
+    await wwait(function () { return q("#ai-cards .ai-card"); }, 8000, ".ai-card 渲染");
+    var ta = taOf(TARGET);
+    var orig = ta.value;
+    q("#ai-cards [data-ai='0']").click();
+    await wwait(function () { return taOf(TARGET).value === "【验证】marksync 改写文本"; }, 8000, "应用改写生效");
+    await wwait(function () { return q("#ai-cards .ai-card.applied .applied-note"); }, 6000, "卡片标记已应用");
+    /* 手动把文本改回原样 → 徽标就地回退、应用按钮回归（不点刷新） */
+    ta = taOf(TARGET);
+    ta.value = orig;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () { return !q("#ai-cards .ai-card.applied") && !!q("#ai-cards [data-ai='0']"); }, 6000, "手动改写 → 徽标回退+按钮回归");
+    log("marksync/live", true, "手动编辑后就地回退徽标（不靠刷新）");
+    /* 再应用 → 面板关着时改文本 → 重开面板 → 渲染前重算，无陈旧徽标 */
+    q("#ai-cards [data-ai='0']").click();
+    await wwait(function () { return taOf(TARGET).value === "【验证】marksync 改写文本"; }, 8000, "再次应用");
+    clickEl('[data-nav="ai"]');
+    await wwait(function () { return q("#ai-panel").classList.contains("ai-closed"); }, 4000, "面板收起");
+    var ta2 = taOf(TARGET);
+    ta2.value = orig + "（面板关着时手改）";
+    ta2.dispatchEvent(new Event("input", { bubbles: true }));
+    clickEl('[data-nav="ai"]');
+    await wwait(function () { return q("#ai-panel") && !q("#ai-panel").classList.contains("ai-closed"); }, 6000, "面板重开");
+    await wwait(function () { return !q("#ai-cards .ai-card.applied"); }, 6000, "重开无陈旧徽标");
+    log("marksync/reopen", true, "面板关闭期间的编辑在重开渲染前被事实重算");
   },
 
   "aikind": async function () {   /* R44：rewrite 打在章节上是打空炮——诚实跳过、不写脏属性、工具条不出现 */
@@ -2083,6 +2112,18 @@ def sec_headless():
             headless_case("undoai", prepare=prep_ua, doc=full_ua, target=t_ua)
         except Exception as e:
             add("HEADLESS", "undoai", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_mk, ids_mk = make_copy("-mk")
+            t_mk = ids_mk[0] if ids_mk else "b-edu1"
+
+            def prep_mk():
+                make_copy("-mk")
+                write_suggestion({"for": full_mk, "items": [
+                    {"type": "rewrite", "target": t_mk, "text": "【验证】marksync 改写文本", "reason": "r"}]})
+            headless_case("marksync", prepare=prep_mk, doc=full_mk, target=t_mk)
+        except Exception as e:
+            add("HEADLESS", "marksync", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_ak, _ids_ak = make_copy("-ak")
