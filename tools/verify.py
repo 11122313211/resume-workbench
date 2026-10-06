@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=43" in page and "editor.css?v=32" in page
+    ok = "editor.js?v=44" in page and "editor.css?v=32" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=43 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=44 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1143,6 +1143,24 @@ var CASES = {
     log("aikind/clean", !("text" in sec), "章节对象无被写入的 text 脏属性（模型未被污染）");
   },
 
+  "fitzoom": async function () {   /* R45：适应宽度缩放——按预览区可用宽计算 + 档位记忆 */
+    await loadEditor(DOC);
+    var sel = q("#zoom-select");
+    sel.value = "fit";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    var avail = q("#preview-scroll").clientWidth - 28; // 与实现同一口径：clientWidth 含左右 14px 内边距
+    var zfit = Math.max(0.35, Math.min(1.6, avail / 794));
+    await wwait(function () {
+      var w = parseFloat(q("#zoom-box").style.width);
+      return Math.abs(w - 794 * zfit) < 2;
+    }, 4000, "适应宽度生效");
+    log("fitzoom/fit", true, "zoom-box 宽 " + Math.round(794 * zfit) + "px ≈ 预览区可用宽（z=" + zfit.toFixed(2) + "）");
+    await navFrame(null);
+    await wwait(function () { return q("#cards .card"); }, 12000, "页面重载渲染");
+    await wwait(function () { return q("#zoom-select").value === "fit"; }, 4000, "档位记忆恢复");
+    log("fitzoom/persist", true, "重载后仍为适应宽度（vui-zoom 记忆）");
+  },
+
   "paste-img": async function () {   /* 剪贴板粘贴图片：合成 paste 事件 → 自动上传 → 照片字段落位 */
     await loadEditor(DOC);
     await wwait(function () { return q("#cards .card"); }, 8000, "编辑器渲染");
@@ -1762,7 +1780,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1771,7 +1789,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall",
-                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1914,6 +1932,12 @@ def sec_headless():
             headless_case("aikind", prepare=prep_ak, doc=full_ak)
         except Exception as e:
             add("HEADLESS", "aikind", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_fz, _ids_fz = make_copy("-fz")
+            headless_case("fitzoom", doc=full_fz)
+        except Exception as e:
+            add("HEADLESS", "fitzoom", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_pi, _ids_pi = make_copy("-pi")

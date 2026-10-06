@@ -1479,7 +1479,13 @@ function bindEvents() {
     });
     afterChange(false, true); // 切换类：即时生效 + 按压态即可，不弹 toast（右侧预览实时变化即反馈）
   });
-  document.getElementById("zoom-select").addEventListener("change", adjustZoom);
+  document.getElementById("zoom-select").addEventListener("change", function () {
+    try { localStorage.setItem("vui-zoom", this.value); } catch (e) {} // 缩放档位记忆（R45）
+    adjustZoom();
+  });
+  window.addEventListener("resize", function () { // 适应宽度跟随窗口/分栏变化
+    if (document.getElementById("zoom-select").value === "fit") adjustZoom();
+  });
 
   /* 左右分栏拖拽：拖动调占比、双击复位、位置记忆 */
   var split = document.getElementById("splitter"), leftPane = document.getElementById("left");
@@ -1978,9 +1984,14 @@ function loadSuggestions() {
 
 /* ---------- 缩放 ---------- */
 function adjustZoom() {
-  var z = parseFloat(document.getElementById("zoom-select").value) || 0.8;
+  var sel = document.getElementById("zoom-select");
+  var z = sel.value === "fit" ? 0 : (parseFloat(sel.value) || 0.8);
   var frame = document.getElementById("preview");
   var box = document.getElementById("zoom-box");
+  if (!z) { // 适应宽度（R45）：按预览区可用宽实时计算（clientWidth 含左右 14px 内边距），下限防碎片、上限防失真
+    var avail = document.getElementById("preview-scroll").clientWidth - 28;
+    z = Math.max(0.35, Math.min(1.6, avail / 794));
+  }
   var h = frame.offsetHeight || 1123;
   frame.style.transform = "scale(" + z + ")";
   box.style.width = (794 * z) + "px";
@@ -1991,6 +2002,12 @@ function adjustZoom() {
 window.addEventListener("DOMContentLoaded", function () {
   state.folded = loadFoldStore(); // 折叠状态按文档记忆
   bindEvents();
+  try { // 恢复上次缩放档位（R45）
+    var zv = localStorage.getItem("vui-zoom");
+    var zs = document.getElementById("zoom-select");
+    if (zv && zs && zs.querySelector("option[value='" + zv + "']")) zs.value = zv;
+  } catch (e) {}
+  adjustZoom();
   loadList();
   startAIPoll(); // 全局常驻轮询：建议文件一变即有感知（面板开着渲染，关着亮徽标）
   showOnboard(false); // 首访三步引导（localStorage 记忆）
