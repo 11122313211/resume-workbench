@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=52" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=53" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=52 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=53 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1218,6 +1218,24 @@ var CASES = {
     await wwait(function () { return q("#ai-panel") && !q("#ai-panel").classList.contains("ai-closed"); }, 6000, "面板重开");
     await wwait(function () { return !q("#ai-cards .ai-card.applied"); }, 6000, "重开无陈旧徽标");
     log("marksync/reopen", true, "面板关闭期间的编辑在重开渲染前被事实重算");
+  },
+
+  "photochk": async function () {   /* R57：照片字段指向的文件缺失 → 输入框警示；指向存在的文件 → 警示无痕消失 */
+    await loadEditor(DOC);
+    await wwait(function () { return q("#cards input[data-k='meta'][data-f='照片']"); }, 8000, "照片输入框");
+    await wwait(function () {
+      var i = q("#cards input[data-k='meta'][data-f='照片']");
+      return i && i.classList.contains("time-warn") && (i.title || "").indexOf("没有这个文件") !== -1;
+    }, 6000, "缺失文件警示");
+    log("photochk/missing", true, "data/ 里没有该文件 → 输入框警示 + title 说明");
+    var pin = q("#cards input[data-k='meta'][data-f='照片']");
+    pin.value = "主简历.json"; // 正路径用必定存在的文件代位（不依赖真实照片在不在）
+    pin.dispatchEvent(new Event("input", { bubbles: true }));
+    await wwait(function () {
+      var i = q("#cards input[data-k='meta'][data-f='照片']");
+      return i && !i.classList.contains("time-warn");
+    }, 6000, "存在文件无警示");
+    log("photochk/exists", true, "指向存在的文件 → 警示消失（无痕原则）");
   },
 
   "aikind": async function () {   /* R44：rewrite 打在章节上是打空炮——诚实跳过、不写脏属性、工具条不出现 */
@@ -2124,6 +2142,21 @@ def sec_headless():
             headless_case("marksync", prepare=prep_mk, doc=full_mk, target=t_mk)
         except Exception as e:
             add("HEADLESS", "marksync", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_ph, _ids_ph = make_copy("-ph")
+
+            def prep_ph():
+                make_copy("-ph")
+                st, body = http_req("GET", "/api/doc?name=" + urllib.parse.quote(full_ph, safe=""))
+                d = tryjson(body)
+                if not isinstance(d, dict):
+                    raise RuntimeError("doc 读取失败")
+                d.setdefault("meta", {})["照片"] = "verify-no-such-photo.png"
+                http_req("POST", "/api/save", {"name": full_ph, "doc": d})
+            headless_case("photochk", prepare=prep_ph, doc=full_ph)
+        except Exception as e:
+            add("HEADLESS", "photochk", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_ak, _ids_ak = make_copy("-ak")

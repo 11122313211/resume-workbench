@@ -749,6 +749,23 @@ function updateTimeFmt() {
   });
 }
 
+/* ---------- 照片文件存在性：字段指向的文件在 data/ 里不存在 → 输入框警示（R57），预览/导出将没有照片 ---------- */
+function checkPhotoFile() {
+  var inp = document.querySelector("#cards input[data-k='meta'][data-f='照片']");
+  if (!inp) return;
+  var name = (state.doc.meta["照片"] || "").trim();
+  if (!name) { inp.classList.remove("time-warn"); inp.removeAttribute("title"); return; }
+  fetch("/data/" + encodeURIComponent(name)).then(function (r) {
+    if (r.body && r.body.cancel) r.body.cancel(); // 只要存在性，不下载图片内容
+    var cur = document.querySelector("#cards input[data-k='meta'][data-f='照片']");
+    if (!cur) return; // 期间重渲染：旧结果作废
+    var missing = !r.ok;
+    cur.classList.toggle("time-warn", missing);
+    if (missing) cur.title = "data/ 里没有这个文件：预览与导出将没有照片。检查文件名，或点「选择」重新上传";
+    else cur.removeAttribute("title");
+  }).catch(function () {});
+}
+
 function cycleDoc(dir) { // Alt+↑/↓ 循环切换文档（R28）：主简历与副本同列，切完 toast 报名
   var list = state.list || [];
   if (!list.length) return;
@@ -946,6 +963,7 @@ function updateChars() {
   if (hc) { hc.textContent = "已隐藏 " + hid; hc.classList.toggle("hidden", hid === 0); } // 0 时无痕
   updateJdMarks();
   updateTimeFmt();
+  checkPhotoFile(); // 照片字段指向的文件缺失时警示（R57）
 }
 
 /* ---------- 拖拽排序（SortableJS 三层嵌套；无库时退回原生 DnD）---------- */
@@ -1219,7 +1237,7 @@ function bindEvents() {
     if (!k) return;
     var v = t.value, id = t.getAttribute("data-id"), f = t.getAttribute("data-f");
     if (k !== "bullet" && !f) return; // 防脏键：无字段名的控件（如旧复选框）不得写模型
-    if (k === "meta") state.doc.meta[f] = v;
+    if (k === "meta") { state.doc.meta[f] = v; if (f === "照片") checkPhotoFile(); } // 手填照片文件名即时校验存在性（R57）
     else if (k === "section") { var s = secById(id); if (s) s[f] = v; }
     else if (k === "entry") { var r = findEntry(id); if (r) r.entry[f] = v; }
     else if (k === "bullet") { var b = findBullet(id); if (b) b.bullet.text = v; } // 写 b.bullet.text（findBullet 返回包装对象；曾误写 b.text 导致手打 bullet 从未落模型）
