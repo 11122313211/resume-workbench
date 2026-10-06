@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=45" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=46" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=45 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=46 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1205,6 +1205,28 @@ var CASES = {
     }
   },
 
+  "focusreturn": async function () {   /* R47：弹窗关闭后焦点归还触发按钮（键盘用户不丢位置） */
+    await loadEditor(DOC);
+    /* ① 新建副本弹层（聚焦输入框）→ 点「取消」→ 焦点归位（完整走 捕获→弹窗抢焦点→归还 链路）。
+       注意合成 click() 不移动焦点，先 focus() 再 click() 才等价于真实键盘/鼠标触发时的焦点状态 */
+    var njBtn = await wwait(function () { return q("[data-nav='newjob']"); }, 8000, "＋新建按钮");
+    njBtn.focus(); njBtn.click();
+    await wwait(function () { return q("#m-input"); }, 4000, "输入弹层");
+    await wwait(function () { return idoc().activeElement && idoc().activeElement.id === "m-input"; }, 4000, "弹层聚焦输入框");
+    q("#modal [data-m='no']").click();
+    await wwait(function () { return !q("#modal"); }, 4000, "取消关闭");
+    await wwait(function () { return idoc().activeElement === njBtn; }, 4000, "焦点归位");
+    log("focusreturn/newjob", true, "取消后焦点回「＋新建岗位副本」按钮");
+    /* ② 📊 一览（该弹层不抢焦点）→ Esc → 焦点仍在触发按钮，不丢到 body */
+    var statsBtn = await wwait(function () { return q("[data-nav='stats']"); }, 8000, "📊 按钮");
+    statsBtn.focus(); statsBtn.click();
+    await wwait(function () { return q("#modal .stats-table"); }, 6000, "一览弹窗");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await wwait(function () { return !q("#modal"); }, 4000, "Esc 关闭");
+    await wwait(function () { return idoc().activeElement === statsBtn; }, 4000, "焦点未丢");
+    log("focusreturn/stats", true, "Esc 关一览后焦点仍在 📊 按钮");
+  },
+
   "paste-img": async function () {   /* 剪贴板粘贴图片：合成 paste 事件 → 自动上传 → 照片字段落位 */
     await loadEditor(DOC);
     await wwait(function () { return q("#cards .card"); }, 8000, "编辑器渲染");
@@ -1824,7 +1846,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1833,7 +1855,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall",
-                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -1984,6 +2006,12 @@ def sec_headless():
             add("HEADLESS", "fitzoom", "FAIL", "准备副本失败: %s" % e)
 
         headless_case("statssort")  # 自建临时副本（_verify-ss-）并在用例 finally 里删除
+
+        try:
+            full_fr, _ids_fr = make_copy("-fr")
+            headless_case("focusreturn", doc=full_fr)
+        except Exception as e:
+            add("HEADLESS", "focusreturn", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_pi, _ids_pi = make_copy("-pi")

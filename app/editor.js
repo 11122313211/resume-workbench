@@ -132,6 +132,7 @@ function closeModal() {
   if (m) m.remove();
 }
 function askConfirm(title, body, onOk) {
+  modalCaptureFocus();
   closeModal();
   var ov = document.createElement("div");
   ov.className = "modal-ov"; ov.id = "modal";
@@ -148,6 +149,7 @@ function askConfirm(title, body, onOk) {
   var ok = ov.querySelector("[data-m='ok']"); if (ok) ok.focus();
 }
 function askText(title, label, value, placeholder, onOk) { // 带输入框的弹层（替代原生 prompt，交互语言与 askConfirm 一致）
+  modalCaptureFocus();
   closeModal();
   var ov = document.createElement("div");
   ov.className = "modal-ov"; ov.id = "modal";
@@ -170,6 +172,7 @@ function askText(title, label, value, placeholder, onOk) { // 带输入框的弹
 }
 function showOnboard(force) {
   if (!force && (localStorage.getItem("vui-onboarded") === "1" || /[?&]nointro=1/.test(location.search))) return;
+  modalCaptureFocus();
   closeModal();
   var ov = document.createElement("div");
   ov.className = "modal-ov"; ov.id = "modal";
@@ -181,6 +184,7 @@ function showOnboard(force) {
     "</ol><p class='ob-tip'>提示：Ctrl+S 保存 · Ctrl+E 导出 · Ctrl+J AI 助手 · Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Ctrl+B 加粗（再按取消）· Ctrl+F 文档内查找（Enter 下一处）· T 取舍模式（j/k 移动 · h 隐藏/恢复 · Esc 退出）· Alt+↑/↓ 切换文档 · 点右侧预览可定位左侧卡片 · AI 建议就绪时左侧 🤖 亮圆点，面板关着也不会错过 · ? 重看本引导</p>" +
     "<div class='m-row'><button class='btn primary' data-m='ok'>开始使用</button></div></div>";
   document.body.appendChild(ov);
+  var okb = ov.querySelector("[data-m='ok']"); if (okb) okb.focus(); // 键盘用户 Enter 直接开始（R47 统一）
   ov.addEventListener("click", function (e) {
     if (e.target === ov || (e.target.getAttribute && e.target.getAttribute("data-m") === "ok")) {
       ov.remove(); localStorage.setItem("vui-onboarded", "1");
@@ -397,6 +401,7 @@ function statSortVal(it) {
   }
 }
 function showStats() {
+  modalCaptureFocus();
   closeModal();
   getJSON("/api/list").then(function (r) { statsData = r; renderStats(); })
     .catch(function () { toast("读取投递状态失败：本地服务可能没在运行"); });
@@ -513,7 +518,22 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
   });
 }
 
+/* ---------- 弹窗焦点归还（R47）：打开时记触发点，任一关闭路径（Esc/点背景/动作/替换）后焦点归位 ---------- */
+var modalReturnFocus = null;
+function modalCaptureFocus() { // 各弹窗入口在抢焦点之前同步调用；弹窗接力（体检→确认）时保留最初的触发点
+  if (document.getElementById("modal")) return;
+  var ae = document.activeElement;
+  modalReturnFocus = (ae && ae !== document.body) ? ae : null;
+}
+var modalWatch = new MutationObserver(function () {
+  if (!document.getElementById("modal") && modalReturnFocus) {
+    try { modalReturnFocus.focus(); } catch (e) {}
+    modalReturnFocus = null;
+  }
+});
+
 function showLintModal(issues, onExport) { // 体检清单 → 用户拍板：取消导出 / 仍要导出（不阻断，只提示）
+  modalCaptureFocus();
   closeModal();
   var ov = document.createElement("div");
   ov.className = "modal-ov"; ov.id = "modal";
@@ -525,6 +545,7 @@ function showLintModal(issues, onExport) { // 体检清单 → 用户拍板：�
     "<div class='m-row'><button class='btn' data-m='no'>取消导出</button>" +
     "<button class='btn primary' data-m='ok'>仍要导出</button></div></div>";
   document.body.appendChild(ov);
+  var ok = ov.querySelector("[data-m='ok']"); if (ok) ok.focus(); // 键盘用户直接 Enter=仍要导出（与 askConfirm 同法）
   ov.addEventListener("click", function (e) {
     var a = e.target.getAttribute && e.target.getAttribute("data-m");
     if (e.target === ov || a === "no") ov.remove();
@@ -532,6 +553,7 @@ function showLintModal(issues, onExport) { // 体检清单 → 用户拍板：�
   });
 }
 function showPhotoZoom(src) { // 预览照片放大：点任意处或 Esc 关闭（查看类弹层，无按钮）
+  modalCaptureFocus();
   closeModal();
   var ov = document.createElement("div");
   ov.className = "modal-ov photo-zoom"; ov.id = "modal";
@@ -1406,8 +1428,9 @@ function bindEvents() {
       });
     }).catch(function (e) { toast("改名失败：" + e.message); });
   }
-  function openBackups(name) { // 历史备份与恢复（R25）：恢复=破坏类操作 → 确认 + 可撤销（撤销=把恢复前的内容存回去）
-    flushSave(); // 恢复覆盖的是磁盘内容：先把未落盘的修改写掉，避免恢复后又被补写回
+function openBackups(name) { // 历史备份与恢复（R25）：恢复=破坏类操作 → 确认 + 可撤销（撤销=把恢复前的内容存回去）
+  modalCaptureFocus();
+  flushSave(); // 恢复覆盖的是磁盘内容：先把未落盘的修改写掉，避免恢复后又被补写回
     var shortName = name.replace(/^jobs\//, "");
     getJSON("/api/backups?name=" + encodeURIComponent(name)).then(function (r) {
       var items = (r && r.items) || [];
@@ -2030,6 +2053,7 @@ function adjustZoom() {
 window.addEventListener("DOMContentLoaded", function () {
   state.folded = loadFoldStore(); // 折叠状态按文档记忆
   bindEvents();
+  modalWatch.observe(document.body, { childList: true }); // 弹窗焦点归还观察器（R47）
   try { // 恢复上次缩放档位（R45）
     var zv = localStorage.getItem("vui-zoom");
     var zs = document.getElementById("zoom-select");
