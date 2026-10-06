@@ -1712,7 +1712,18 @@ function uploadPhotoBlob(blob, ext) {
 
   /* AI 抽屉：三步闭环（贴 JD → 发起即复制 → agent 运行后建议自动出现）+ 全部应用（开关走侧栏/Ctrl+J） */
   document.getElementById("ai-close").addEventListener("click", function () { toggleAIPanel(false); });
-  document.getElementById("ai-jd").addEventListener("input", function () { aiJdFor = state.name; updateAISteps(); updateJdMarks(); });
+  document.getElementById("ai-jd").addEventListener("input", function () {
+    aiJdFor = state.name;
+    updateAISteps();
+    updateJdMarks();
+    if (!state.doc) return;
+    var v = this.value;
+    if (!state.doc.job) state.doc.job = {};
+    if (state.doc.job.jdText !== v) { // JD 贴上即随文档自动保存（R50）：没点「发起」就切档/关页也不丢
+      state.doc.job.jdText = v;
+      scheduleSave();
+    }
+  });
   document.getElementById("ai-request").addEventListener("click", function () {
     var btn = this;
     if (aiWaiting) { // 等待中再点 = 取消等待；提示词已在缓存，仍可点「复制提示词」手动复制

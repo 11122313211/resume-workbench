@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=47" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=48" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=47 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=48 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -969,6 +969,22 @@ var CASES = {
       return s1 && s1.classList.contains("done");
     }, 4000, "step1 加 .done");
     log("ai-steps/step1", true, "JD 输入后 step1 有 .done");
+  },
+
+  "jdsave": async function () {   /* R50：JD 贴上即随文档自动保存——切档/关页/重开都不丢 */
+    await loadEditor(DOC);
+    await openPanel();
+    var jd = idoc().getElementById("ai-jd");
+    jd.value = "R50 验证：贴上即存 " + QS.get("ts");
+    jd.dispatchEvent(new Event("input", { bubbles: true }));
+    await sleep(1400); // 越过 900ms 自动保存防抖窗口
+    var d = await (await fetch("/api/doc?name=" + encodeURIComponent(DOC))).json();
+    log("jdsave/persist", (d.job && d.job.jdText === jd.value), "服务端 doc.job.jdText 已落盘");
+    await navFrame(null); // 模拟关页后重开
+    await wwait(function () { return q("#cards .card"); }, 12000, "页面重载渲染");
+    await openPanel();
+    await wwait(function () { return q("#ai-jd").value === "R50 验证：贴上即存 " + QS.get("ts"); }, 6000, "重开面板 JD 还原");
+    log("jdsave/reload", true, "重开页面后面板 JD 与保存内容一致");
   },
 
   "triage": async function () {   /* 键盘取舍模式：t 进入 → j 移动 → h 隐藏/恢复 → Esc 退出 */
@@ -1860,7 +1876,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalerev", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -1869,7 +1885,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall",
-                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalerev", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -2193,6 +2209,12 @@ def sec_headless():
         def prep_steps():
             make_copy("-p")
         headless_case("ai-steps", prepare=prep_steps, doc=FULL_P)
+
+        try:
+            full_jd, _ids_jd = make_copy("-jd")
+            headless_case("jdsave", doc=full_jd)
+        except Exception as e:
+            add("HEADLESS", "jdsave", "FAIL", "准备副本失败: %s" % e)
 
         # 主简历零污染守卫：无头用例全程不应改动 data/主简历.json
         cur = backup(MASTER)
