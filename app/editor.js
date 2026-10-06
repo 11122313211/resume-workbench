@@ -1797,6 +1797,7 @@ function uploadPhotoBlob(blob, ext) {
 
 /* ---------- AI 面板开关与自动轮询 ---------- */
 var aiPollTimer = null, aiSig = null, aiWaiting = false, aiWaitTO = null, aiJdFor = null; // aiJdFor=JD 输入框内容归属的文档
+var aiHistMode = false; // 历史建议只读回看中（R52）：期间 1-9 不应用、轮询不顶掉回看画面
 var aiSeenSig = (function () { try { return localStorage.getItem("vui-ai-seen") || ""; } catch (e) { return ""; } })(); // 已看过的建议签名（跨刷新记忆）
 var aiPromptCache = null, aiSecTimer = null, aiReqBusy = false, aiHaveValidSug = false; // 提示词缓存/秒表/请求写入中/当前文档有可用建议
 function setAIWaiting(on) { // 等待态：1s 秒表更新按钮文案 + 120s 超时兜底
@@ -1873,6 +1874,7 @@ function toggleAIPanel(open) {
     loadSuggestions();
     loadAIHistory(); // 历史建议归档列表：重新发起前的上一轮不丢，可只读回看
     restoreAIRequest();
+    aiHistMode = false; // 打开面板回到当前建议视图（R52）
     updateAISteps();
     updateJdMarks(); // JD 随文档恢复后立即刷新命中徽标
     setAIBadge(false); // 打开即视为查看：徽标熄灭（loadSuggestions 会记已读）
@@ -1897,6 +1899,8 @@ function loadAIHistory() { // 历史建议：服务端在每次发起时归档�
           var toolbar = document.getElementById("ai-toolbar");
           if (toolbar) toolbar.classList.add("hidden");
           var box2 = document.getElementById("ai-cards");
+          box2.__items = null; // 回看态清掉当前建议缓存：1-9 与应用按钮无处生效（R52）
+          aiHistMode = true;
           box2.innerHTML = "<div class='ai-hist-banner'>只读回看：" + esc(d.for || "") +
             "（历史建议不随当前文档状态应用）<button class='btn small' id='ai-hist-back'>↩ 返回当前建议</button></div>" +
             arr.map(function (it) {
@@ -1906,7 +1910,7 @@ function loadAIHistory() { // 历史建议：服务端在每次发起时归档�
                 "<div>" + esc(it.type === "rewrite" ? (it.text || "") : (it.reason || it.text || "")).replace(/\n/g, "<br>") + "</div></div>";
             }).join("");
           var back = document.getElementById("ai-hist-back");
-          if (back) back.addEventListener("click", function () { loadSuggestions(); });
+          if (back) back.addEventListener("click", function () { aiHistMode = false; loadSuggestions(); });
         }).catch(function () { toast("历史建议读取失败"); });
       });
     });
@@ -1935,7 +1939,7 @@ function startAIPoll() { // 全局常驻轮询（本地请求零成本）：面�
       }).join(";");
       if (sig === aiSig) return;
       var open = !document.getElementById("ai-panel").classList.contains("ai-closed");
-      if (open) { loadSuggestions(); return; } // 就地渲染（内部对齐 aiSig 并记已读）
+      if (open) { if (!aiHistMode) loadSuggestions(); return; } // 就地渲染（历史回看中不顶掉画面，R52）
       aiSig = sig; // 面板关着：只记账，打开面板时 loadSuggestions 会重新渲染
       if (arr.length && r && r.for === state.name && sig !== aiSeenSig) {
         setAIBadge(true);
@@ -1963,6 +1967,7 @@ function charDiff(a, b) { // 字符级轻量 diff：公共前后缀对齐，中�
 }
 
 function aiApply(i2) { // 应用第 i2 条建议：按钮点击与键盘 1-9 共用
+  if (aiHistMode) return; // 历史回看是只读态（R52）：面板上展示的不是当前建议，数字键不得暗中生效
   var box = document.getElementById("ai-cards");
   var it = box.__items && box.__items[i2];
   if (!it || it.type === "note" || state.appliedAI[i2]) return;

@@ -999,6 +999,30 @@ var CASES = {
     log("jdsave/reload", true, "重开页面后面板 JD 与保存内容一致");
   },
 
+  "histview": async function () {   /* R52：历史建议回看是只读态——1-9 不误应用当前建议，「返回」可回 */
+    await loadEditor(DOC);
+    await openPanel();
+    await wwait(function () { return q("#ai-cards .ai-card"); }, 8000, "当前建议渲染");
+    var histRow = await wwait(function () { return q("#ai-history [data-hist]"); }, 8000, "历史归档行出现");
+    histRow.click();
+    await wwait(function () { return q("#ai-cards .ai-hist-banner"); }, 6000, "回看横幅出现");
+    log("histview/banner", true, "进入只读回看（横幅 + 返回按钮）");
+    var orig = taOf(TARGET).value;
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "1", bubbles: true }));
+    await sleep(500);
+    var d = await (await fetch("/api/doc?name=" + encodeURIComponent(DOC))).json();
+    var tgt = null;
+    (d.sections || []).forEach(function (s) {
+      (s.entries || []).forEach(function (e) {
+        (e.bullets || []).forEach(function (b) { if (b.id === TARGET) tgt = b; });
+      });
+    });
+    log("histview/isolated", !!tgt && tgt.text === orig, "回看中按 1：文档纹丝不动（text=" + (tgt ? tgt.text.slice(0, 12) : "?") + "…）");
+    clickEl("#ai-hist-back");
+    await wwait(function () { return q("#ai-cards .ai-card") && !q("#ai-cards .ai-hist-banner"); }, 6000, "返回当前建议");
+    log("histview/back", true, "「返回当前建议」恢复当前视图");
+  },
+
   "triage": async function () {   /* 键盘取舍模式：t 进入 → j 移动 → h 隐藏/恢复 → Esc 退出 */
     await loadEditor(DOC);
     function press(key) {
@@ -2227,6 +2251,23 @@ def sec_headless():
             headless_case("jdsave", doc=full_jd)
         except Exception as e:
             add("HEADLESS", "jdsave", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_hv, ids_hv = make_copy("-hv")
+            t_hv = ids_hv[0] if ids_hv else "b-edu1"
+
+            def prep_hv():
+                make_copy("-hv")
+                write_suggestion({"for": full_hv, "items": [
+                    {"type": "rewrite", "target": t_hv, "text": "【验证】R52 当前建议文本", "reason": "r"}]})
+                hist_dir = DATA / "ai-history"   # 历史归档样本：结束时按「本次新增」清理，不动用户归档
+                hist_dir.mkdir(exist_ok=True)
+                (hist_dir / ("verify-hist-" + TS + ".json")).write_text(
+                    json.dumps({"for": full_hv, "items": [{"type": "note", "text": "历史回看样本"}]},
+                               ensure_ascii=False), encoding="utf-8")
+            headless_case("histview", prepare=prep_hv, doc=full_hv, target=t_hv)
+        except Exception as e:
+            add("HEADLESS", "histview", "FAIL", "准备副本失败: %s" % e)
 
         # 主简历零污染守卫：无头用例全程不应改动 data/主简历.json
         cur = backup(MASTER)
