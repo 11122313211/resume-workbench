@@ -39,6 +39,7 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 JOBS = DATA / "jobs"
 PORT = 8618
+APIV = 2  # API 协议版本：行为有变必须 +1 并同步 tools/verify.py 的 EXPECTED_APIV（旧进程靠它现形）
 
 sys.path.insert(0, str(ROOT / "tools"))
 import printer  # noqa: E402
@@ -158,9 +159,10 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/api/ping":
-                # 版本指纹：verify 复用外部服务前用它识别「旧进程跑旧代码」（R22 教训）
-                rev = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:10]
-                return self._json({"ok": True, "rev": rev})
+                # 版本指纹：apiv 为协议版本（verify 据此识别陈旧进程并自动替换）；
+                # rev 为代码指纹（每次请求现读磁盘，仅供参考，不用于陈旧判断——旧进程会谎报）
+                return self._json({"ok": True, "apiv": APIV,
+                                   "rev": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:10]})
 
             if parsed.path == "/api/list":
                 docs = ["主简历"] + sorted(
@@ -308,6 +310,15 @@ class Handler(SimpleHTTPRequestHandler):
                 if frm in d:
                     d[to] = d.pop(frm)
                     write_delivery(d)
+                # 备份历史跟随改名（R41）：留底目录以文档名为键，不迁移的话改名即与历史断联，
+                # 「历史备份」弹窗在新名下变空；目标目录已存在（同名旧档残留）则合入不冲突的文件
+                bsrc = DATA / ".backup" / frm.replace("/", "_")
+                bdst = DATA / ".backup" / to.replace("/", "_")
+                if bsrc.is_dir():
+                    bdst.mkdir(parents=True, exist_ok=True)
+                    for f in bsrc.iterdir():
+                        if f.is_file() and not (bdst / f.name).exists():
+                            shutil.move(str(f), str(bdst / f.name))
                 return self._json({"ok": True, "name": to})
 
             if parsed.path == "/api/delivery":

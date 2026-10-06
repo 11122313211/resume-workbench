@@ -1322,7 +1322,7 @@ function bindEvents() {
       if (!name) { toast("名称不能为空"); return; }
       var full = name.indexOf("jobs/") === 0 ? name : "jobs/" + name;
       if (state.list.indexOf(full) !== -1) { // 同名已存在：明确确认后才覆盖
-        askConfirm("同名副本已存在", "「" + full + "」已存在。继续将用主简历当前内容覆盖它，旧的裁剪成果无法恢复。", function () { createJob(name); });
+        askConfirm("同名副本已存在", "「" + full + "」已存在。继续将用主简历当前内容覆盖它；旧版本已自动留底，可随时在「历史备份」里找回。", function () { createJob(name); });
         return;
       }
       createJob(name);
@@ -1411,7 +1411,7 @@ function bindEvents() {
     else if (nav === "bkdoc") openBackups(b.getAttribute("data-doc"));
     else if (nav === "deldoc") {
       var dn = b.getAttribute("data-doc");
-      askConfirm("删除岗位副本「" + dn.replace(/^jobs\//, "") + "」？", "将删除该副本及其已导出的 PDF，主简历不受影响，且不可恢复（建议导出留档后再删）。", function () { deleteJob(dn); });
+      askConfirm("删除岗位副本「" + dn.replace(/^jobs\//, "") + "」？", "将删除该副本及其已导出的 PDF，主简历不受影响；界面内不可恢复（自动留底文件仍保留在 data/.backup/ 下，特殊情况可人工找回）。建议导出留档后再删。", function () { deleteJob(dn); });
     }
     else if (nav === "newjob") newJobFlow();
     else if (nav === "ai") toggleAIPanel();

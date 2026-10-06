@@ -58,6 +58,8 @@ HIST_KEEP = set()      # verify 启动时已存在的建议归档文件名；结
 RESULTS = []           # (section, name, status, evidence)
 SERVER_NOTE = ""       # 服务复用/旧代码提示
 HTTPD = None           # 本脚本 in-process 起的服务（只 shutdown 自己起的）
+EXTERNAL_REVIVED = False  # 本轮把陈旧的外部 8618 服务替换成了 in-process：收尾时负责把工作台拉回来
+EXPECTED_APIV = 2      # 期望的 serve.py API 协议版本（改 serve.py 行为时同步 bump 两边；旧进程无此字段=陈旧）
 
 
 def add(section, name, status, evidence=""):
@@ -252,19 +254,47 @@ def start_inprocess():
     return False
 
 
+def kill_port_8618():
+    """结束监听 8618 的进程（Windows netstat/taskkill，argv 列表调用）。"""
+    try:
+        # 不用 text=True：netstat 输出是系统 OEM 编码（中文系统 GBK），reader 线程按 UTF-8
+        # 解码会崩成 stdout=None；要解析的字段（TCP/:8618/LISTENING/PID）全为 ASCII，容错解码即可
+        raw = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, timeout=15).stdout or b""
+    except Exception:
+        return
+    out = raw.decode("utf-8", "replace")
+    pids = set()
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and parts[0] == "TCP" and parts[1].endswith(":8618") and parts[3] == "LISTENING":
+            pids.add(parts[4])
+    for pid in pids:
+        try:
+            subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, timeout=15)
+        except Exception:
+            pass
+    if pids:
+        time.sleep(0.8)  # 端口释放宽限
+
+
 def ensure_server():
-    global SERVER_NOTE
+    global SERVER_NOTE, EXTERNAL_REVIVED
     if port_open():
-        # 过期探测（R22 教训）：外部进程可能跑着旧版 serve.py，新端点会 404
+        # 过期探测（R22 教训 + R41 修正）：rev 指纹每次请求现读磁盘文件，旧进程会谎报新代码；
+        # 改用 API 协议版本号 apiv——旧进程没有该字段（或版本更旧）即现形，自动替换为当前代码
         st, body = http_req("GET", "/api/ping", timeout=5)
-        rev = hashlib.sha256((ROOT / "serve.py").read_bytes()).hexdigest()[:10]
         r = tryjson(body)
-        if st != 200 or r.get("rev") != rev:
-            SERVER_NOTE = "8618 外部服务为旧版本（/api/ping rev 不匹配，新端点用例可能失败）→ 请重启服务后重跑"
+        if st != 200 or r.get("apiv") != EXPECTED_APIV:
+            note("8618 外部服务为旧代码（apiv=%r ≠ %d）→ 结束旧进程，改用 in-process 当前代码"
+                 % (r.get("apiv") if st == 200 else "无响应", EXPECTED_APIV))
+            kill_port_8618()
+            EXTERNAL_REVIVED = True
+            SERVER_NOTE = "in-process serve.start_server() 启动（外部旧进程已替换，收尾自动拉回工作台）"
         else:
-            SERVER_NOTE = "8618 已有服务，复用（版本指纹一致）"
-        return True
-    SERVER_NOTE = "in-process serve.start_server() 启动"
+            SERVER_NOTE = "8618 已有服务，复用（apiv=%d 一致）" % EXPECTED_APIV
+            return True
+    else:
+        SERVER_NOTE = "in-process serve.start_server() 启动"
     ok = start_inprocess()
     if ok and HTTPD is not None:
         refresh_server_if_stale._hash = hash(serve_src())  # 记录启动时的源码指纹
@@ -322,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=40" in page and "editor.css?v=32" in page
+    ok = "editor.js?v=41" in page and "editor.css?v=32" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=40 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=41 与 editor.css?v=32" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -488,19 +518,23 @@ def sec_api(server_ok):
     ev.append("再读404=%s(http=%s)" % (s6, st))
     add("API", "一次性副本全生命周期", "PASS" if allok else "FAIL", " ".join(ev))
 
-    # c2) 副本重命名：JSON 跟走（新可读/旧 404/主简历禁改）
+    # c2) 副本重命名：JSON 跟走（新可读/旧 404/主简历禁改）+ 备份历史跟随改名（R41）
     name_a = "verify-tmp-rename-" + TS
     full_a = "jobs/" + name_a
     http_req("POST", "/api/newjob", {"name": name_a})
+    _st, docr = get_doc(full_a)
+    http_req("POST", "/api/save", {"name": full_a, "doc": docr})   # 留底一份：改名迁移的前提
     st, body = http_req("POST", "/api/rename", {"from": full_a, "to": "jobs/verify-tmp-renamed-" + TS})
     r = tryjson(body)
     rn1 = st == 200 and r.get("ok") is True
     st2, _ = get_doc("jobs/verify-tmp-renamed-" + TS)
     st3, _ = get_doc(full_a)
     st4, _b4 = http_req("POST", "/api/rename", {"from": "主简历", "to": "jobs/verify-tmp-nope"})
-    rn_ok = rn1 and st2 == 200 and st3 == 404 and st4 == 400
+    st5, b5 = http_req("GET", "/api/backups?name=" + urllib.parse.quote("jobs/verify-tmp-renamed-" + TS))
+    bkmig = st5 == 200 and len(tryjson(b5).get("items") or []) >= 1
+    rn_ok = rn1 and st2 == 200 and st3 == 404 and st4 == 400 and bkmig
     add("API", "副本重命名", "PASS" if rn_ok else "FAIL",
-        "rename=%s 新可读=%s 旧404=%s 主简历禁改=%s(http=%s)" % (rn1, st2 == 200, st3 == 404, st4 == 400, st4))
+        "rename=%s 新可读=%s 旧404=%s 主简历禁改=%s(http=%s) 备份历史跟随=%s" % (rn1, st2 == 200, st3 == 404, st4 == 400, st4, bkmig))
 
     # c4) 投递状态（R33）：sidecar 设置/回读/非法值与未知文档拒绝/改名跟随/删除清理
     full_ds = "jobs/verify-tmp-ds-" + TS
@@ -2076,6 +2110,22 @@ def main():
                 DRIVE.unlink()
             except Exception:
                 pass
+        if EXTERNAL_REVIVED:
+            # 本轮替换过用户的外部工作台服务：退出前按用户日常方式（启动脚本）把工作台拉回来，
+            # 否则电池跑完用户的 workbench 就没了。先等 in-process 释放端口；ShellExecute 固定
+            # 路径、无命令拼接、不带用户输入。
+            try:
+                for _ in range(20):
+                    if not port_open():
+                        break
+                    time.sleep(0.25)
+                if hasattr(os, "startfile"):
+                    os.startfile(str(ROOT / "启动简历工作台.bat"))
+                    note("已触发「启动简历工作台.bat」恢复工作台服务")
+                else:
+                    note("非 Windows 环境无法自动恢复工作台，请手动启动 serve.py")
+            except Exception as e:
+                note("恢复工作台服务失败（可手动双击启动脚本）：%s" % e)
 
     sys.exit(report())
 
