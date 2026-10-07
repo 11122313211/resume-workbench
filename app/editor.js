@@ -1477,7 +1477,8 @@ function bindEvents() {
       if (!r.ok) { toast("创建失败：" + (r.error || "")); return; }
       state.name = null;
       return loadList().then(function () { return switchDoc(r.name); }).then(function () {
-        toast("岗位副本已创建（已复制主简历）");
+        toast("副本已创建（内容=主简历）。下一步：取舍压到一页，或直接导出", 10000,
+          { label: "进入取舍模式", fn: function () { triageStart(); } }); // 创建→取舍 闭环引导（R67）
       });
     }).catch(function (e) { // 服务不可达/中途异常：必须说话，不能看起来像无响应
       toast("创建失败：" + (e && e.message ? e.message : "") + "\n本地服务可能没在运行——双击「启动简历工作台.bat」后再试", 8000);

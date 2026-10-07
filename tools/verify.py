@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=58" in page and "editor.css?v=34" in page
+    ok = "editor.js?v=59" in page and "editor.css?v=34" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=58 与 editor.css?v=34" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=59 与 editor.css?v=34" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -874,6 +874,15 @@ var CASES = {
     inp.value = name;
     clickEl("[data-m='ok']");
     await wwait(function () { return railShows("jobs/" + name); }, 20000, "侧栏出现 " + name);
+    /* R67：创建→取舍 闭环引导——toast 带「进入取舍模式」一键动作 */
+    var guideBtn = await wwait(function () {
+      var b = q("#toast #toast-act");
+      return b && b.textContent.indexOf("进入取舍模式") !== -1 ? b : null;
+    }, 8000, "创建后引导 toast");
+    guideBtn.click();
+    await wwait(function () { return idoc().getElementById("triage-hud"); }, 6000, "一键进入取舍模式");
+    log("create/guide", true, "创建后一键进入取舍模式（新用户不用自己找下一步）");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); // 退出取舍，还原
     log("create", true, "侧栏出现 " + name + " 且 #rail-docname 匹配");
   },
 
