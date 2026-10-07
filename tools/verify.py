@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=63" in page and "editor.css?v=35" in page
+    ok = "editor.js?v=64" in page and "editor.css?v=35" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=63 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=64 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1771,6 +1771,22 @@ var CASES = {
     log("aibadge/open", true, "toast 动作一键打开 AI 面板，徽标同步熄灭（打开即视为查看）");
   },
 
+  "ctrlp": async function () {   /* R72：Ctrl+P 劫持为标准导出——浏览器默认会把工作台界面整页打印出去而非简历 */
+    await loadEditor(DOC);
+    await wwait(function () { return q("#cards .bullet-row textarea"); }, 8000, "编辑器就绪");
+    idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "p", ctrlKey: true, bubbles: true }));
+    var path = await wwait(function () {   // 体检拦截 / 超页确认 / 直接导出完成：都是标准链路的合法分支
+      var m = idoc().getElementById("modal");
+      if (m && m.querySelector(".lint-item")) return "lint";
+      if (m) { var ok = m.querySelector("[data-m='ok']"); if (ok) ok.click(); }
+      var t = idoc().getElementById("toast");
+      if (t && t.textContent.indexOf("PDF 已导出") !== -1) return "done";
+      return "";
+    }, 30000, "Ctrl+P 触发标准导出链路");
+    log("ctrlp/fired", path !== "", "Ctrl+P → 标准导出链路（" + (path === "lint" ? "体检拦截" : "直接导出完成") + "）");
+    if (path === "lint") clickEl("#modal [data-m='no']");
+  },
+
   "expmark": async function () {  /* 导出状态可见性（绿）：初始无状态点 → 真点导出按钮 → 绿点出现（客户端 refreshRailMeta 链路） */
     await loadEditor(DOC);
     function rowDotA(cls) {
@@ -2138,7 +2154,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "aiscroll", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "aiscroll", "ctrlp", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -2147,7 +2163,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall",
-                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "aiscroll", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "aiscroll", "ctrlp", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -2465,6 +2481,12 @@ def sec_headless():
             headless_case("expmark", prepare=prep_xp, doc=full_xp)
         except Exception as e:
             add("HEADLESS", "expmark", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_cp, _ids_cp = make_copy("-cp")
+            headless_case("ctrlp", doc=full_cp)
+        except Exception as e:
+            add("HEADLESS", "ctrlp", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_x2, _ids_x2 = make_copy("-x2")
