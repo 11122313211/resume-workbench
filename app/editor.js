@@ -2092,6 +2092,8 @@ function loadSuggestions() {
     var box = document.getElementById("ai-cards");
     var toolbar = document.getElementById("ai-toolbar");
     var count = document.getElementById("ai-count");
+    var panel = document.getElementById("ai-panel"); // 真正的滚动容器是 #ai-panel（overflow:auto），#ai-cards 自己从不滚（R70 教训）
+    var keepScroll = panel ? panel.scrollTop : 0; // 重渲染前记住阅读位置（R70）
     var raw = (r && r.items) || [];
     var arr = Array.isArray(raw) ? raw : [];
     aiSig = arr.length + ":" + arr.map(function (it) {
@@ -2154,6 +2156,7 @@ function loadSuggestions() {
         (it.type !== "note" && !applied ? "<button class='btn small apply-btn' data-ai='" + i + "'>✓ 应用</button>" : applied ? "<span class='applied-note'>（已应用）</span>" : "") +
         "</div>";
     }).join("");
+    if (panel) panel.scrollTop = Math.min(keepScroll, Math.max(0, panel.scrollHeight - panel.clientHeight)); // 恢复阅读位置（R70）：轮询/刷新重建卡片不打断阅读；内容不变时为幂等 no-op
     $("[data-ai]", box).forEach(function (b) {
       b.addEventListener("click", function () {
         aiApply(+b.getAttribute("data-ai"));

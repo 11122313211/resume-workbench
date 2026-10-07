@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=61" in page and "editor.css?v=35" in page
+    ok = "editor.js?v=62" in page and "editor.css?v=35" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=61 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=62 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1287,6 +1287,23 @@ var CASES = {
     q("#modal").click(); // 点背景关闭，还原现场
   },
 
+  "aiscroll": async function () {   /* R70：AI 面板重渲染（轮询/刷新/应用）保留滚动位置，阅读不跳顶。滚动容器是 #ai-panel（overflow:auto） */
+    await loadEditor(DOC);
+    await openPanel();
+    await wwait(function () { return q("#ai-cards .ai-card"); }, 8000, "建议卡片渲染");
+    var panel = await wwait(function () {
+      var p = q("#ai-panel");
+      return p && !p.classList.contains("ai-closed") && p.scrollHeight > p.clientHeight + 80 ? p : null; // 内容够长、可滚动
+    }, 8000, "面板可滚动");
+    panel.scrollTop = panel.scrollHeight; // 滚到底
+    await wwait(function () { return panel.scrollTop > 50; }, 4000, "已滚到底部");
+    var before = panel.scrollTop;
+    q("#ai-refresh").click(); // ↻ 手动刷新 → loadSuggestions 全量重渲染
+    await wwait(function () { return q("#ai-cards .ai-card"); }, 8000, "重渲染完成");
+    await wwait(function () { return Math.abs(q("#ai-panel").scrollTop - before) < 40; }, 4000, "滚动位置保留");
+    log("aiscroll/keep", true, "重渲染后滚动位置保留（阅读不跳顶）");
+  },
+
   "photochk": async function () {   /* R57：照片字段指向的文件缺失 → 输入框警示；指向存在的文件 → 警示无痕消失 */
     await loadEditor(DOC);
     await wwait(function () { return q("#cards input[data-k='meta'][data-f='照片']"); }, 8000, "照片输入框");
@@ -2096,7 +2113,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "aiscroll", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -2105,7 +2122,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall",
-                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "aiscroll", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -2271,6 +2288,21 @@ def sec_headless():
             headless_case("stalebk", prepare=prep_sb, doc=full_sb)
         except Exception as e:
             add("HEADLESS", "stalebk", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_sc, _ids_sc = make_copy("-sc")
+
+            def prep_sc():
+                make_copy("-sc")
+                long_note = "这条说明用于验证滚动：JD 关键词集中在自动化报表与风控看板，建议保留 ETL 与自动化相关成果，压缩支付链路细节，正文以量化结果开头。" * 10
+                write_suggestion({"for": full_sc, "items": [
+                    {"type": "note", "text": long_note},
+                    {"type": "note", "text": long_note + "（第二条）"},
+                    {"type": "note", "text": long_note + "（第三条）"}
+                ]})
+            headless_case("aiscroll", prepare=prep_sc, doc=full_sc)
+        except Exception as e:
+            add("HEADLESS", "aiscroll", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_ak, _ids_ak = make_copy("-ak")
