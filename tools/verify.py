@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=57" in page and "editor.css?v=34" in page
+    ok = "editor.js?v=58" in page and "editor.css?v=34" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=57 与 editor.css?v=34" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=58 与 editor.css?v=34" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1255,6 +1255,29 @@ var CASES = {
     log("marksync/reopen", true, "面板关闭期间的编辑在重开渲染前被事实重算");
   },
 
+  "stalebk": async function () {   /* R66：多窗口冲突 toast 带「打开历史备份」一键动作 */
+    await loadEditor(DOC);
+    /* 模拟另一个窗口保存：磁盘 savedAt 跃迁到未来，越过本窗口基线 → 本窗口下次保存被判 stale */
+    var st = await fetch("/api/doc?name=" + encodeURIComponent(DOC)).then(function (r) { return r.json(); });
+    st.meta.savedAt = "2027-01-01T00:00:00";
+    await fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: DOC, doc: st }) });
+    var ta = await wwait(function () { return q("#cards .bullet-row textarea"); }, 8000, "首个成果行");
+    ta.value += "R66";
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    var act = await wwait(function () {
+      var b = q("#toast #toast-act");
+      return b && b.textContent.indexOf("打开历史备份") !== -1 ? b : null;
+    }, 12000, "冲突 toast 带「打开历史备份」动作");
+    act.click();
+    await wwait(function () {
+      var m = q("#modal .m-title");
+      return m && m.textContent.indexOf("历史备份") !== -1;
+    }, 6000, "一键打开备份弹窗");
+    log("stalebk/act", true, "冲突提示一键直达历史备份（知情→找回 闭环）");
+    q("#modal").click(); // 点背景关闭，还原现场
+  },
+
   "photochk": async function () {   /* R57：照片字段指向的文件缺失 → 输入框警示；指向存在的文件 → 警示无痕消失 */
     await loadEditor(DOC);
     await wwait(function () { return q("#cards input[data-k='meta'][data-f='照片']"); }, 8000, "照片输入框");
@@ -2047,7 +2070,7 @@ def sec_headless():
             break
         if time.time() >= deadline:
             for c in ["create", "bold", "ai-apply", "ai-applyall", "ai-wrongdoc",
-                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalerev", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                      "ai-badformat", "ai-request", "ai-steps", "menu", "master-no-eye", "save-feedback", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
                 add("HEADLESS", c, "SKIP", "契约标记未出现在 app/editor.js（缺 %s），无头部分整体跳过" % ",".join(missing))
             return
         note("契约标记未齐（缺 %s），30s 后复查…" % ",".join(missing))
@@ -2056,7 +2079,7 @@ def sec_headless():
     EDGE = find_edge()
     if not EDGE:
         for c in ["create", "bold", "ai-apply", "ai-applyall",
-                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalerev", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
+                  "ai-wrongdoc", "ai-badformat", "ai-request", "ai-steps", "triage", "undobtn", "jdm", "idfix", "aikeys", "undoai", "aikind", "fitzoom", "statssort", "focusreturn", "lintfmt", "jdsave", "histview", "pdfopen", "sortkb", "boldjd", "marksync", "photochk", "delivrev", "stalebk", "stalerev", "paste-img", "timefmt", "railfilter", "chipjump", "aibadge", "expmark", "expmark2", "lint", "photozoom", "altswitch", "backup", "rename", "stats", "statsexp", "find", "statsfilter"]:
             add("HEADLESS", c, "SKIP", "未找到 Edge（%s）" % "；".join(EDGE_CANDIDATES))
         return
 
@@ -2213,6 +2236,15 @@ def sec_headless():
             headless_case("photochk", prepare=prep_ph, doc=full_ph)
         except Exception as e:
             add("HEADLESS", "photochk", "FAIL", "准备副本失败: %s" % e)
+
+        try:
+            full_sb, _ids_sb = make_copy("-sb")
+
+            def prep_sb():
+                make_copy("-sb")  # 重跑时重置副本，基线回到干净状态
+            headless_case("stalebk", prepare=prep_sb, doc=full_sb)
+        except Exception as e:
+            add("HEADLESS", "stalebk", "FAIL", "准备副本失败: %s" % e)
 
         try:
             full_ak, _ids_ak = make_copy("-ak")

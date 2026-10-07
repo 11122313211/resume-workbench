@@ -1182,14 +1182,20 @@ function doSave(name, doc) {
   return postJSON("/api/save", { name: name, doc: doc }).then(function (r) {
     if (r.ok) {
       if (r.savedAt && doc && doc.meta) doc.meta.savedAt = r.savedAt; // 基线推进：自己下一次保存不误报（R59）
-      if (r.stale && name) { // 别的窗口在本文档加载后保存过：本窗口的覆盖生效了，必须让用户知道（R59）
+      flashOk("✓ 已保存"); refreshRailMeta(); // savedAt 变化 → 侧栏状态点即时转琥珀
+      if (r.stale && name) { // 别的窗口在本文档加载后保存过：本窗口的覆盖生效了，必须让用户知道（R59）；一键直达历史备份（R66）
+        // 注意顺序：放在 flashOk 之后写入，冲突提示（12s、带动作）不被 ✓闪现覆盖
         var nw = Date.now();
         if (name !== staleWarn.name || nw - staleWarn.at > 5 * 60 * 1000) {
           staleWarn.name = name; staleWarn.at = nw;
-          toast("这份文档刚被其他窗口修改过——本次保存以当前窗口内容为准；如需那边的版本，去「历史备份」找回", 12000);
+          toast("这份文档刚被其他窗口修改过——本次保存以当前窗口内容为准", 12000,
+            { label: "打开历史备份", fn: function () { // openBackups 声明在 bindEvents 作用域内，顶层不可直达：点侧栏 🕘 走既有委托链（同 exportByName 模式）
+                var bk = null;
+                $$(".rail-bk").forEach(function (x) { if (x.getAttribute("data-doc") === name) bk = x; });
+                if (bk) bk.click(); else toast("未找到该文档的备份入口（文档列表可能未就绪）");
+              } });
         }
       }
-      flashOk("✓ 已保存"); refreshRailMeta(); // savedAt 变化 → 侧栏状态点即时转琥珀
     }
     else { setSaveState("⚠ 保存失败", "warn"); saveFailToast(); }
   }).catch(function () {
