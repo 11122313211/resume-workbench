@@ -538,6 +538,10 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
   ov.addEventListener("keydown", function (e) { // 表头键盘可达（R54）：Tab 聚焦后 Enter/空格触发排序
     var th = e.target.closest && e.target.closest(".sort-th");
     if (th && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); th.click(); return; }
+    var pill = e.target.closest && e.target.closest(".deliv-pill"); // 行内按钮键盘可达（R73）：必须在行跳转之前分流，否则回车被 closest('.stats-row') 劫持成跳副本
+    if (pill && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); pill.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: e.shiftKey })); return; } // click 带 shiftKey：Shift+回车与 Shift+点击同语义（反向退回）
+    var ex = e.target.closest && e.target.closest(".stats-export");
+    if (ex && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); ex.click(); return; }
     var tr = e.target.closest && e.target.closest(".stats-row");
     if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); ov.remove(); switchDoc(tr.getAttribute("data-doc")); } // 行跳转键盘可达（R65）
   });

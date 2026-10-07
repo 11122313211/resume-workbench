@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=64" in page and "editor.css?v=35" in page
+    ok = "editor.js?v=65" in page and "editor.css?v=35" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=64 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=65 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1570,6 +1570,23 @@ var CASES = {
       return p && p.textContent === before; // 退回到点击前的状态，顺带还原现场
     }, 6000, "Shift+点击退回原状态");
     log("stats/shift-back", true, "Shift+点击胶囊反向退回（" + after + " → " + before + "，不用绕一圈）");
+    /* R73：行内按钮键盘可达——胶囊聚焦后回车=推进状态（旧代码被行跳转劫持：弹窗直接关闭跳副本） */
+    var pillK = q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill');
+    var beforeK = pillK.textContent;
+    pillK.focus();
+    pillK.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await wwait(function () {
+      var p = q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill');
+      return p && p.textContent !== beforeK; // 弹窗必须还开着且状态已推进
+    }, 6000, "回车推进状态（弹窗不关、不跳转）");
+    log("stats/kbd-pill", true, "胶囊键盘回车=推进状态（行跳转不再劫持行内按钮）");
+    q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill')
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true })); // Shift+回车反向，顺带还原现场
+    await wwait(function () {
+      var p = q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill');
+      return p && p.textContent === beforeK;
+    }, 6000, "Shift+回车退回原状态");
+    log("stats/kbd-pill-back", true, "Shift+回车反向退回（" + q('#modal .stats-row[data-doc="' + DOC + '"] .deliv-pill').textContent + " 阶段还原）");
     /* R65：行键盘可达——Tab 聚焦后回车跳转对应副本 */
     var rowEl = q('#modal .stats-row[data-doc="' + DOC + '"]');
     rowEl.focus();
