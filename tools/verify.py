@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=55" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=56" in page and "editor.css?v=33" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=55 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=56 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1724,6 +1724,9 @@ var CASES = {
     idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true, cancelable: true }));
     await wwait(function () { return q("#rail-docname").textContent !== before; }, 8000, "Alt+↓ 切到下一个文档");
     log("altswitch/down", true, before + " → " + q("#rail-docname").textContent);
+    var nbTitle = q("#rail-docname").textContent; // 切换后的文档名
+    await wwait(function () { return idoc().title === nbTitle + " · 简历工作台"; }, 6000, "标签页标题随文档切换");
+    log("altswitch/title", true, "标签页标题联动 → " + idoc().title);
     idoc().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true, cancelable: true }));
     await wwait(function () { return q("#rail-docname").textContent === before; }, 8000, "Alt+↑ 切回原文档");
     log("altswitch/up", true, "Alt+↑ 回到 " + before);

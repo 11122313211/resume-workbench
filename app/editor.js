@@ -966,6 +966,12 @@ function updateChars() {
   updateJdMarks();
   updateTimeFmt();
   checkPhotoFile(); // 照片字段指向的文件缺失时警示（R57）
+  updateDocTitle(); // 标签页标题随文档联动（R64）
+}
+var lastDocTitle = ""; // 标题去抖（R64）：没换文档就不重复赋值
+function updateDocTitle() { // 标签页标题随文档联动（R64）：多标签/多窗口一眼分清（配合 R59 冲突提示场景）
+  var t = state.name ? state.name.replace(/^jobs\//, "") + " · 简历工作台" : "简历工作台";
+  if (t !== lastDocTitle) { lastDocTitle = t; document.title = t; }
 }
 
 /* ---------- 拖拽排序（SortableJS 三层嵌套；无库时退回原生 DnD）---------- */
