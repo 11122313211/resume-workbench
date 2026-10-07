@@ -298,32 +298,32 @@ function updateStatsBadge(meta) { // 📊 琥珀数字徽标（R36）：导出�
 function lintDoc(doc) {
   var pats = [/待补充/, /待完善/, /TODO/i, /某公司/, /某某/, /XX公司/, /XX项目/, /XX科技/, /2026-?XX/, /占位/];
   var issues = [];
-  function hit(text, where) {
+  function hit(text, where, id) {
     if (!text) return;
     var s = String(text);
     for (var i = 0; i < pats.length; i++) {
-      if (pats[i].test(s)) { issues.push(where + "疑似占位内容「" + s.slice(0, 24) + "」"); return; }
+      if (pats[i].test(s)) { issues.push({ msg: where + "疑似占位内容「" + s.slice(0, 24) + "」", id: id || "" }); return; }
     }
   }
   var m = doc.meta || {};
   ["姓名", "电话", "邮箱", "城市", "求职意向"].forEach(function (k) { hit(m[k], "基本信息·" + k + "："); });
   var phone = String(m.电话 || "").trim(), mail = String(m.邮箱 || "").trim();
-  if (!phone && !mail) issues.push("基本信息缺联系方式（电话/邮箱都为空）");
+  if (!phone && !mail) issues.push({ msg: "基本信息缺联系方式（电话/邮箱都为空）", id: "" });
   else { // 格式粗查（R48）：只拦明显破损（位数离谱/缺 @），不做正则审判，宁缺勿滥
     var digits = phone.replace(/\D/g, "");
-    if (phone && (digits.length < 6 || digits.length > 15)) issues.push("基本信息·电话：数字位数 " + digits.length + " 可疑（常见 6~15 位）");
-    if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) issues.push("基本信息·邮箱：格式不像有效邮箱（缺 @ 或域名）");
+    if (phone && (digits.length < 6 || digits.length > 15)) issues.push({ msg: "基本信息·电话：数字位数 " + digits.length + " 可疑（常见 6~15 位）", id: "" });
+    if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) issues.push({ msg: "基本信息·邮箱：格式不像有效邮箱（缺 @ 或域名）", id: "" });
   }
   (doc.sections || []).forEach(function (s) {
     if (s.hidden) return;
-    hit(s.标题, "章节标题：");
+    hit(s.标题, "章节标题：", s.id);
     (s.entries || []).forEach(function (en) {
       if (en.hidden) return;
-      ["left", "right", "meta", "tags"].forEach(function (k) { hit(en[k], "「" + (s.标题 || "") + "」条目："); });
+      ["left", "right", "meta", "tags"].forEach(function (k) { hit(en[k], "「" + (s.标题 || "") + "」条目：", en.id); });
       (en.bullets || []).forEach(function (b) {
         if (b.hidden) return;
-        hit(b.text, "「" + (s.标题 || "") + "」正文：");
-        if (!String(b.text || "").trim()) issues.push("「" + (s.标题 || "") + "」有空内容行（可填写或隐藏）");
+        hit(b.text, "「" + (s.标题 || "") + "」正文：", b.id);
+        if (!String(b.text || "").trim()) issues.push({ msg: "「" + (s.标题 || "") + "」有空内容行（可填写或隐藏）", id: b.id });
       });
     });
   });
@@ -583,15 +583,19 @@ function showLintModal(issues, onExport) { // 体检清单 → 用户拍板：�
   var ov = document.createElement("div");
   ov.className = "modal-ov"; ov.id = "modal";
   ov.innerHTML = "<div class='modal'><div class='m-title'>🩺 交付体检：发现 " + issues.length + " 项问题</div>" +
-    "<div class='lint-list'>" + issues.slice(0, 8).map(function (s) {
-      return "<div class='lint-item'>" + esc(s) + "</div>";
+    "<div class='lint-list'>" + issues.slice(0, 8).map(function (it) {
+      var loc = it && it.id ? " data-loc='" + esc(it.id) + "' title='点击定位到这张卡片（去修好再导出）'" : "";
+      return "<div class='lint-item'" + loc + ">" + esc(it.msg) + "</div>";
     }).join("") +
     (issues.length > 8 ? "<div class='lint-item'>… 共 " + issues.length + " 项</div>" : "") + "</div>" +
+    "<div class='bk-tip'>带下划线的条目可点击，直接定位到问题卡片；修好再导出</div>" +
     "<div class='m-row'><button class='btn' data-m='no'>取消导出</button>" +
     "<button class='btn primary' data-m='ok'>仍要导出</button></div></div>";
   document.body.appendChild(ov);
   var ok = ov.querySelector("[data-m='ok']"); if (ok) ok.focus(); // 键盘用户直接 Enter=仍要导出（与 askConfirm 同法）
   ov.addEventListener("click", function (e) {
+    var li = e.target.closest && e.target.closest("[data-loc]");
+    if (li) { var loc = li.getAttribute("data-loc"); ov.remove(); locateCard(loc); return; } // 点条目定位卡片（R68）：用户去修，导出流程中止
     var a = e.target.getAttribute && e.target.getAttribute("data-m");
     if (e.target === ov || a === "no") ov.remove();
     else if (a === "ok") { ov.remove(); onExport(); }

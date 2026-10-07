@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=59" in page and "editor.css?v=34" in page
+    ok = "editor.js?v=60" in page and "editor.css?v=35" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=59 与 editor.css?v=34" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=60 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1432,6 +1432,18 @@ var CASES = {
     clickEl("#modal [data-m='no']");
     await wwait(function () { return !q("#modal"); }, 6000, "取消后弹窗关闭");
     log("lintfmt/cancel", true, "取消导出，清单可关");
+    /* R68：可定位条目点击 → 关清单 + 定位高亮到问题卡片（去修再导） */
+    clickEl("[data-nav='export']");
+    await wwait(function () { return idoc().querySelector("#modal .lint-item[data-loc]"); }, 8000, "可定位条目出现");
+    var locItem = idoc().querySelector("#modal .lint-item[data-loc]");
+    var targetId = locItem.getAttribute("data-loc");
+    locItem.click();
+    await wwait(function () { return !q("#modal"); }, 4000, "点击后清单关闭");
+    await wwait(function () {
+      var c = idoc().querySelector("#cards [data-id='" + targetId + "']");
+      return c && c.classList.contains("flash");
+    }, 4000, "定位高亮");
+    log("lintfmt/locate", true, "体检条目点击定位到问题卡片（导出流程中止，先去修）");
   },
 
   "paste-img": async function () {   /* 剪贴板粘贴图片：合成 paste 事件 → 自动上传 → 照片字段落位 */
@@ -2286,11 +2298,22 @@ def sec_headless():
             full_lf, _ids_lf = make_copy("-lf")
 
             def prep_lf():
-                make_copy("-lf")  # 每次尝试重建：注入格式破损的联系方式（位数离谱电话 + 缺 @ 邮箱）
+                make_copy("-lf")  # 每次尝试重建：注入格式破损联系方式 + 占位正文（R68 定位 beat 用）
                 nm = "jobs/verify-ui-" + TS + "-lf"
                 stl, dl = get_doc(nm)
                 dl["meta"]["电话"] = "123"
                 dl["meta"]["邮箱"] = "no-at-sign"
+                done = False
+                for sec in dl.get("sections", []):
+                    for en in sec.get("entries", []):
+                        for b in en.get("bullets", []):
+                            b["text"] = "待补充"
+                            done = True
+                            break
+                        if done:
+                            break
+                    if done:
+                        break
                 http_req("POST", "/api/save", {"name": nm, "doc": dl})
             headless_case("lintfmt", prepare=prep_lf, doc=full_lf)
         except Exception as e:
