@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=60" in page and "editor.css?v=35" in page
+    ok = "editor.js?v=61" in page and "editor.css?v=35" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=60 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=61 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1838,6 +1838,11 @@ var CASES = {
     idoc().querySelector('#rail button[data-nav="rendoc"][data-doc="' + DOC + '"]').click();
     var inp = await wwait(function () { return idoc().getElementById("m-input"); }, 4000, "改名弹窗");
     inp.value = "verify-ui-" + QS.get("ts") + "-rn2";
+    /* R69：IME 组合中的回车=选字确认，不得提交弹窗 */
+    inp.focus();
+    inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }));
+    await wwait(function () { return !!idoc().getElementById("m-input"); }, 3000, "组合回车不提交弹窗");
+    log("rename/ime", true, "IME 组合中回车被守卫（弹窗未提交，选字不误触）");
     var ok = idoc().querySelector("#modal [data-m='ok']") || idoc().querySelector("#modal button");
     ok.click();
     await wwait(function () { return railShows("jobs/verify-ui-" + QS.get("ts") + "-rn2"); }, 8000, "侧栏出现新名");

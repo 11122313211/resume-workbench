@@ -193,6 +193,7 @@ function askText(title, label, value, placeholder, onOk) { // 带输入框的弹
   var inp = ov.querySelector("#m-input");
   inp.focus(); inp.select();
   inp.addEventListener("keydown", function (e) {
+    if (e.isComposing || e.keyCode === 229) return; // IME 组合中：回车是选字确认，不是提交弹窗（R69）
     if (e.key === "Enter") { var v1 = inp.value.trim(); ov.remove(); onOk(v1); }
   });
   ov.addEventListener("click", function (e) {
@@ -346,6 +347,7 @@ function findBar() { // 惰性创建：结构只建一次
   document.getElementById("find-in").addEventListener("input", function () { findScan(this.value); });
   document.getElementById("find-in").addEventListener("keydown", function (e) {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeFind(); return; } // stopPropagation：Esc 只关最顶层（查找条），不连带关 AI 抽屉（与 rail-search 同法）
+    if (e.isComposing || e.keyCode === 229) return; // IME 组合中：回车是选字确认，不跳命中（R69）
     if (e.key === "Enter") { e.preventDefault(); findGoto(e.shiftKey ? -1 : 1); return; }
     e.stopPropagation(); // 查找条内按键不进全局分发
   });
@@ -1620,6 +1622,7 @@ function openBackups(name) { // 历史备份与恢复（R25）：恢复=破坏�
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.click(); }
   });
   document.getElementById("rail-search").addEventListener("keydown", function (e) {
+    if (e.isComposing || e.keyCode === 229) return; // IME 组合中：Esc 先撤销候选，不清空筛选（R69）
     if (e.key === "Escape") { e.stopPropagation(); this.value = ""; railFilter = ""; renderRail(); this.blur(); }
   });
   document.getElementById("density-seg").addEventListener("click", function (e) {
