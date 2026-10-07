@@ -508,7 +508,7 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
   var shown = statsFilter === "" ? items : items.filter(function (it) { return (it.dv.st || "未投") === statsFilter; });
   var rows = shown.map(function (it) {
     var di = Math.max(0, DELIV_ST.indexOf(it.dv.st || "未投"));
-    return "<tr class='stats-row' data-doc=\"" + esc(it.n) + "\"><td>" + esc(it.date) + "</td><td>" + esc(it.company) +
+    return "<tr class='stats-row' tabindex='0' data-doc=\"" + esc(it.n) + "\"><td>" + esc(it.date) + "</td><td>" + esc(it.company) +
       "</td><td>" + esc(it.role) + "</td><td><span class='stats-dot " + it.cls + "'></span>" + it.st +
       "</td><td class='stats-time'>" + esc(it.exp) +
       "</td><td><button class='deliv-pill d" + di + "' data-dv=\"" + esc(it.n) +
@@ -535,7 +535,9 @@ function renderStats() { // 用 statsData + statsFilter 构建投递一览弹窗
   document.body.appendChild(ov);
   ov.addEventListener("keydown", function (e) { // 表头键盘可达（R54）：Tab 聚焦后 Enter/空格触发排序
     var th = e.target.closest && e.target.closest(".sort-th");
-    if (th && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); th.click(); }
+    if (th && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); th.click(); return; }
+    var tr = e.target.closest && e.target.closest(".stats-row");
+    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); ov.remove(); switchDoc(tr.getAttribute("data-doc")); } // 行跳转键盘可达（R65）
   });
   ov.addEventListener("click", function (e) {
     var a = e.target.getAttribute && e.target.getAttribute("data-m");

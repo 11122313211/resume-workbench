@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=56" in page and "editor.css?v=33" in page
+    ok = "editor.js?v=57" in page and "editor.css?v=34" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=56 与 editor.css?v=33" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=57 与 editor.css?v=34" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1491,6 +1491,16 @@ var CASES = {
       return p && p.textContent === before; // 退回到点击前的状态，顺带还原现场
     }, 6000, "Shift+点击退回原状态");
     log("stats/shift-back", true, "Shift+点击胶囊反向退回（" + after + " → " + before + "，不用绕一圈）");
+    /* R65：行键盘可达——Tab 聚焦后回车跳转对应副本 */
+    var rowEl = q('#modal .stats-row[data-doc="' + DOC + '"]');
+    rowEl.focus();
+    rowEl.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await wwait(function () { return !q("#modal"); }, 4000, "回车关弹窗跳转");
+    await wwait(function () { return railShows(DOC); }, 6000, "键盘跳转落点正确");
+    log("stats/kbd-row", true, "一览行 Tab 可聚焦，回车即跳对应副本");
+    /* 鼠标路径等价性：重开一览后点行跳转 */
+    clickEl("[data-nav='stats']");
+    await wwait(function () { return q('#modal .stats-row[data-doc="' + DOC + '"]'); }, 4000, "一览重开");
     q('#modal .stats-row[data-doc="' + DOC + '"]').click();
     await wwait(function () { return !q("#modal"); }, 4000, "点行后弹窗关闭");
     await wwait(function () { return railShows(DOC); }, 6000, "定位到对应副本");

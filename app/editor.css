@@ -385,3 +385,4 @@ body.splitting { cursor: col-resize; user-select: none; }
 .stats-table th.sort-th:hover { color: #222; }
 .stats-table th.sort-th.on { color: #2f6fed; }
 .stats-table th.sort-th:focus-visible { outline: 2px solid #2f6fed; outline-offset: -2px; border-radius: 4px; }
+.stats-table tr.stats-row:focus-visible { outline: 2px solid #2f6fed; outline-offset: -2px; } /* 行跳转键盘可达（R65） */
