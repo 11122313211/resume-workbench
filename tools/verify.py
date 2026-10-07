@@ -352,9 +352,9 @@ def sec_static():
 
     page = read_text(APP / "index.html")
     refs = re.findall(r"editor\.(?:js|css)\?v=\d+", page)
-    ok = "editor.js?v=62" in page and "editor.css?v=35" in page
+    ok = "editor.js?v=63" in page and "editor.css?v=35" in page
     add("STATIC", "index.html 资源版本标记", "PASS" if ok else "FAIL",
-        "%s | 实际: %s" % ("含 editor.js?v=62 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
+        "%s | 实际: %s" % ("含 editor.js?v=63 与 editor.css?v=35" if ok else "缺契约版本号", ",".join(refs) or "无"))
 
     js = read_text(APP / "editor.js")
     pv = read_text(APP / "preview.html")
@@ -1121,6 +1121,24 @@ var CASES = {
     await wwait(function () { return !idoc().getElementById("triage-hud"); }, 4000, "Esc 退出 HUD 消失");
     await wwait(function () { return !idoc().querySelector("#cards .triage-cur"); }, 4000, "高亮清除");
     log("triage/exit", true, "Esc 退出取舍模式");
+    /* R72：退出引导——toast 报告隐藏行数，「导出 PDF」动作一键进入标准导出链路 */
+    await wwait(function () {
+      var t = idoc().getElementById("toast");
+      return t && t.style.display === "block" && idoc().getElementById("toast-act") &&
+             t.textContent.indexOf("取舍结束") !== -1;
+    }, 4000, "退出引导 toast 出现");
+    log("triage/guide", true, "退出引导: " + idoc().getElementById("toast").textContent.trim());
+    idoc().getElementById("toast-act").click();
+    var path = await wwait(function () {   // 体检拦截 / 超页确认 / 直接导出完成：都是标准链路的合法分支
+      var m = idoc().getElementById("modal");
+      if (m && m.querySelector(".lint-item")) return "lint";
+      if (m) { var ok = m.querySelector("[data-m='ok']"); if (ok) ok.click(); }
+      var t = idoc().getElementById("toast");
+      if (t && t.textContent.indexOf("PDF 已导出") !== -1) return "done";
+      return "";
+    }, 30000, "「导出 PDF」动作触发标准链路");
+    log("triage/expact", path !== "", "动作触发标准导出链路（" + (path === "lint" ? "体检拦截" : "直接导出完成") + "）");
+    if (path === "lint") clickEl("#modal [data-m='no']");
   },
 
   "undobtn": async function () {   /* 手打 bullet 落模型（存量 bug 回归守卫）+ 侧栏 ↶↷ 按钮全链路 */
@@ -1737,13 +1755,20 @@ var CASES = {
     log("chipjump/done", true, "chip 点击进入取舍模式并定位到隐藏行");
   },
 
-  "aibadge": async function () {  /* 建议就绪全局提醒：prepare 预先写好属于 DOC 的建议 → 面板关闭时侧栏 🤖 亮圆点 → 打开面板熄灭 */
+  "aibadge": async function () {  /* 建议就绪全局提醒：prepare 预先写好属于 DOC 的建议 → 面板关闭时侧栏 🤖 亮圆点 → 就绪 toast 带「查看」动作一键开面板（R71）→ 打开即熄灭 */
     await loadEditor(DOC); /* 面板默认关闭；全局轮询 2.5s 内应感知已就绪的建议 */
     var dot = await wwait(function () { return q("[data-nav='ai'] .ai-ready"); }, 8000, "🤖 亮起 .ai-ready 徽标");
     log("aibadge/dot", !!dot, "面板关闭时建议就绪 → 侧栏 🤖 亮圆点（无需开面板才发现）");
-    clickEl("[data-nav='ai']");
-    await wwait(function () { return !q("[data-nav='ai'] .ai-ready"); }, 6000, "打开面板后徽标熄灭");
-    log("aibadge/clear", true, "打开面板即视为查看，徽标熄灭");
+    await wwait(function () {
+      var t = q("#toast");
+      return t.style.display === "block" && idoc().getElementById("toast-act") &&
+             t.textContent.indexOf("AI 建议已就绪") !== -1;
+    }, 4000, "就绪 toast + 「查看」动作出现");
+    log("aibadge/toastact", true, "就绪 toast 带一键「查看」动作（通知→行动 闭环）");
+    idoc().getElementById("toast-act").click();
+    await wwait(function () { return !q("#ai-panel").classList.contains("ai-closed"); }, 4000, "点「查看」面板打开");
+    await wwait(function () { return !q("[data-nav='ai'] .ai-ready"); }, 4000, "打开面板后徽标熄灭");
+    log("aibadge/open", true, "toast 动作一键打开 AI 面板，徽标同步熄灭（打开即视为查看）");
   },
 
   "expmark": async function () {  /* 导出状态可见性（绿）：初始无状态点 → 真点导出按钮 → 绿点出现（客户端 refreshRailMeta 链路） */

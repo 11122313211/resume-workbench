@@ -662,6 +662,22 @@ function triageExit() {
   if (hud) hud.remove();
   $$("#cards .triage-cur").forEach(function (el) { el.classList.remove("triage-cur"); });
 }
+function countHiddenRows(doc) { // 与 updateChars 的 hid 同口径：隐藏章节/条目/成果行各计 1，章节整体隐藏不重复计内部（R72）
+  var n = 0;
+  (doc.sections || []).forEach(function (s) {
+    if (s.hidden) { n++; return; }
+    (s.entries || []).forEach(function (e) {
+      if (e.hidden) { n++; return; }
+      (e.bullets || []).forEach(function (b) { if (b.hidden) n++; });
+    });
+  });
+  return n;
+}
+function triageExitGuide() { // 用户主动退出（Esc/T）的下一步引导（R72）：取舍→导出 闭环；切文档触发的退出（switchDoc）不打扰
+  var n = countHiddenRows(state.doc);
+  toast(n ? "取舍结束 · 本文档已隐藏 " + n + " 行，Ctrl+E 随时可导出" : "取舍结束 · Ctrl+E 随时可导出", 8000,
+    { label: "导出 PDF", fn: function () { exportByName(state.name); } });
+}
 function triageMove(step) {
   triageIdx = Math.min(triageIds.length - 1, Math.max(0, triageIdx + step));
   triagePaint();
@@ -1769,7 +1785,7 @@ function uploadPhotoBlob(blob, ext) {
       if (document.getElementById("modal")) { closeModal(); return; } // Esc 只关最顶层：先弹窗，再查找条，再操作菜单，再取舍模式，最后 AI 面板
       if (findOpen()) { closeFind(); return; }
       if (menuEl) { closeMenu(); return; }
-      if (triageIdx >= 0) { triageExit(); return; }
+      if (triageIdx >= 0) { triageExit(); triageExitGuide(); return; }
       toggleAIPanel(false);
       return;
     }
@@ -1781,7 +1797,7 @@ function uploadPhotoBlob(blob, ext) {
       if (k === "j" || k === "arrowdown") { e.preventDefault(); triageMove(1); return; }
       if (k === "k" || k === "arrowup") { e.preventDefault(); triageMove(-1); return; }
       if (k === "h") { e.preventDefault(); triageToggle(); return; }
-      if (k === "t") { e.preventDefault(); triageExit(); return; }
+      if (k === "t") { e.preventDefault(); triageExit(); triageExitGuide(); return; }
     }
     if (!typing && !document.getElementById("modal") && !menuEl && k === "t") { e.preventDefault(); triageStart(); return; }
     if (!typing && !document.getElementById("modal") && k === "/") { // /：聚焦文档筛选（:focus-within 自动展开侧栏）
@@ -2041,7 +2057,7 @@ function startAIPoll() { // 全局常驻轮询（本地请求零成本）：面�
       aiSig = sig; // 面板关着：只记账，打开面板时 loadSuggestions 会重新渲染
       if (arr.length && r && r.for === state.name && sig !== aiSeenSig) {
         setAIBadge(true);
-        toast("AI 建议已就绪 ✓（左侧 🤖 可查看）");
+        toast("AI 建议已就绪 ✓", 8000, { label: "查看", fn: function () { toggleAIPanel(true); } }); // 通知→行动 闭环（R71）：一键开面板，不必再找侧栏 🤖
       } else if (!arr.length || sig === aiSeenSig) setAIBadge(false);
     }).catch(function () {}); // 文件尚不存在：静默等待下一次轮询
   }, 2500);
